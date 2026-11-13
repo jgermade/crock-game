@@ -22,6 +22,17 @@ Estado: Fases 0–3 hechas (capítulo 1 jugable). **Fase 4**: audio de baja late
 
 ## Compilar y jugar
 
+Lo habitual, con `make`:
+
+| Orden | Qué hace |
+|---|---|
+| `make install` | Dependencias del sistema (apt, dnf o brew) y de Rust |
+| `make test` | Formato, clippy y tests |
+| `make up` | Jugar en modo desarrollo: compilación rápida, métricas y recarga en caliente de `tuning.cfg` (`make up ARGS="--chapter=1 --room=3"`) |
+| `make build` | Binario optimizado con sus assets en `dist/crock/` |
+
+A mano:
+
 SDL3 se compila desde fuente y se enlaza en estático (hace falta `cmake` y un
 compilador de C). En Linux, además, las cabeceras de X11/Wayland/audio:
 
