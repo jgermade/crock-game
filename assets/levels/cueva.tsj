@@ -5,12 +5,12 @@
  "name": "cueva",
  "tilewidth": 24,
  "tileheight": 24,
- "tilecount": 15,
- "columns": 15,
+ "tilecount": 35,
+ "columns": 35,
  "margin": 0,
  "spacing": 0,
  "image": "../gfx/cueva.png",
- "imagewidth": 360,
+ "imagewidth": 840,
  "imageheight": 24,
  "tiles": [
   {
@@ -160,6 +160,206 @@
      "name": "kind",
      "type": "string",
      "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 18,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 19,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 20,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 21,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 22,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 23,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 24,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 25,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 26,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 27,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 28,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 29,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 30,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 31,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 32,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 33,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 34,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
     }
    ]
   }

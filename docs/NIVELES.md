@@ -64,7 +64,11 @@ tools/solve_all.sh
 
 `tools/ascii2tmj.py` convierte una sala en texto (mismos caracteres que los
 tests: `#`, `^ v < >`, `P`, `o x b m e w`, `f`, `E`) a `.tmj` con autotiling y
-decoración. Útil para bocetar rápido; después el `.tmj` es la fuente.
+decoración (matas, estalactitas y una capa `deco_rocas` con rocas grandes
+sobre las caras de las paredes). Útil para bocetar rápido; después el `.tmj`
+es la fuente. En Tiled, las rocas son piezas de varios tiles del tileset
+`cueva` (2×2, 1×3, 1×2 y 1×1): se pintan en una capa cuyo nombre empiece por
+`deco`, así que no afectan a la colisión.
 
 ## Arte
 

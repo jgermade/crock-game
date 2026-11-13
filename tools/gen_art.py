@@ -328,6 +328,90 @@ def pebbles():
     return c
 
 
+# --- Rocas grandes de pared (piezas de varios tiles) -----------------------
+
+
+def boulders(wt, ht, seed):
+    """Pila de rocas redondeadas de wt x ht tiles: fondo de grietas oscuras,
+    rocas en gris cálido con luz arriba-izquierda, grietas y musgo encima."""
+    W, H = wt * T, ht * T
+    c = Canvas(W, H)
+    rnd = random.Random(seed)
+    for y in range(H):
+        for x in range(W):
+            c.set(x, y, "6")
+    # Rocas: una o dos grandes y alguna pequeña, que se solapan.
+    rocks = []
+    if wt == 2:
+        # Una roca grande que domina y alguna pequeña en una esquina.
+        rocks.append((W * rnd.uniform(0.46, 0.56), H * rnd.uniform(0.5, 0.58), W * 0.53, H * 0.5))
+        if rnd.random() < 0.7:
+            rocks.append((W * rnd.choice((0.18, 0.82)), H * 0.14, W * 0.2, H * 0.17))
+    else:
+        # Columna estrecha: rocas a todo el ancho, una alta o varias apiladas.
+        n = ht if rnd.random() < 0.5 else max(1, ht - 1)
+        cuts = sorted(rnd.uniform(0.25, 0.75) for _ in range(n - 1))
+        edges = [0.0] + cuts + [1.0] if n > 1 else [0.0, 1.0]
+        for a, b in zip(edges, edges[1:]):
+            rocks.append((W * rnd.uniform(0.47, 0.53), H * (a + b) / 2, W * 0.56, H * (b - a) / 2 + 1.5))
+    ramp = "9!@$"
+    for k, (cx, cy, rx, ry) in enumerate(rocks):
+        bumps = [rnd.uniform(0, 6.28) for _ in range(3)]
+        for y in range(H):
+            for x in range(W):
+                dx, dy = (x + 0.5 - cx) / rx, (y + 0.5 - cy) / ry
+                ang = math.atan2(dy, dx)
+                # Borde irregular (superelipse con bultos).
+                edge = 1 + 0.06 * math.sin(ang * 3 + bumps[0]) + 0.04 * math.sin(ang * 5 + bumps[1])
+                r = (abs(dx) ** 2.4 + abs(dy) ** 2.4) ** (1 / 2.4)
+                if r > edge:
+                    continue
+                if r > edge - 1.3 / min(rx, ry):
+                    c.set(x, y, "6")  # contorno oscuro
+                    continue
+                nz = max(0.0, 1 - r * r) ** 0.5
+                light = -dx * 0.55 - dy * 0.75 + nz * 0.6
+                v = 1.2 + light * 1.6 + (BAYER[y % 4][x % 4] / 16 - 0.5) * 0.45
+                c.set(x, y, ramp[max(0, min(3, round(v)))])
+        # Grietas cortas.
+        for _ in range(2):
+            x, y = cx + rnd.uniform(-rx, rx) * 0.4, cy + rnd.uniform(-ry, ry) * 0.3
+            for _ in range(int(min(rx, ry) * 0.5)):
+                if c.get(int(x), int(y)) in ramp:
+                    c.set(int(x), int(y), "9" if c.get(int(x), int(y)) != "9" else "6")
+                x += rnd.choice((-1, 0, 1))
+                y += 1
+        # Musgo por arriba, con algún hilo colgando.
+        for x in range(W):
+            for y in range(H):
+                ch = c.get(x, y)
+                if ch in ramp and c.get(x, y - 1) == "6":
+                    if math.sin(x * 0.45 + k * 2 + bumps[2]) > 0.15:
+                        depth = rnd.randint(1, 3)
+                        for d in range(depth):
+                            if c.get(x, y + d) in ramp:
+                                c.set(x, y + d, ">" if d == 0 else "<")
+                        if rnd.random() < 0.12:
+                            for d in range(depth, depth + rnd.randint(2, 5)):
+                                if c.get(x, y + d) in ramp:
+                                    c.set(x, y + d, "<")
+                    break
+    return c
+
+
+def slices(c, wt, ht):
+    """Corta una pieza de varios tiles en tiles (por filas)."""
+    out = []
+    for ty in range(ht):
+        for tx in range(wt):
+            t = Canvas(T, T)
+            for y in range(T):
+                for x in range(T):
+                    t.set(x, y, c.get(tx * T + x, ty * T + y))
+            out.append(t)
+    return out
+
+
 # --- Objetos -------------------------------------------------------------------
 
 BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
@@ -534,6 +618,12 @@ def cueva():
         ("solid", stone(21)),
         ("solid", stone(22, dark=True)),
         ("solid", stone_top(14)),
+    ] + [
+        # Rocas de pared (decoración; ver tools/ascii2tmj.py):
+        # 15-18 y 19-22: 2x2; 23-25 y 26-28: 1x3; 29-30 y 31-32: 1x2; 33 y 34: 1x1.
+        ("deco", t)
+        for wt, ht, seed in ((2, 2, 1), (2, 2, 2), (1, 3, 3), (1, 3, 4), (1, 2, 5), (1, 2, 6), (1, 1, 7), (1, 1, 8))
+        for t in slices(boulders(wt, ht, seed), wt, ht)
     ]
 
 
