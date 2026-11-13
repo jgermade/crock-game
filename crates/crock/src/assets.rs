@@ -62,7 +62,7 @@ pub fn chapters(dir: &Path) -> Vec<Chapter> {
         let name = stem.replacen("capitulo", "Capítulo ", 1);
         out.push(Chapter { name, rooms });
     }
-    for sandbox in ["golpe", "movimiento"] {
+    for sandbox in ["golpe", "movimiento", "cornisas"] {
         out.push(Chapter {
             name: format!("Pruebas: {sandbox}"),
             rooms: vec![levels.join(format!("{sandbox}.tmj"))],

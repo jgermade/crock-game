@@ -248,6 +248,10 @@ pub enum SimEvent {
     ChapterComplete,
     /// El jugador salta.
     Jump,
+    /// El jugador se agarra a una cornisa.
+    Grab {
+        at: (f32, f32),
+    },
     /// El jugador toca suelo, con la velocidad de caída que llevaba (px/s).
     Land {
         speed: f32,

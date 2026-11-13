@@ -162,6 +162,7 @@ impl Audio {
                 0.9,
             ),
             SimEvent::Whiff => self.play(Sfx::Whiff, 0.45),
+            SimEvent::Grab { .. } => self.play(Sfx::Land, 0.4),
             SimEvent::Break { .. } => self.play(Sfx::Break, 0.7),
             SimEvent::EnemyDown { .. } => self.play(Sfx::EnemyDown, 0.6),
             SimEvent::Burn { .. } => self.play(Sfx::Burn, 0.6),

@@ -20,6 +20,7 @@ fn rooms() -> Vec<String> {
         .map(|l| l.trim_end_matches(".tmj").to_string())
         .collect();
     v.push("golpe".into());
+    v.push("cornisas".into());
     v
 }
 

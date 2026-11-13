@@ -7,8 +7,11 @@ cd "$(dirname "$0")/.."
 cargo build --release -q -p crock-solver
 mkdir -p assets/replays
 rooms=$(grep -v '^#' assets/levels/capitulo1.txt | sed '/^\s*$/d')
-for room in $rooms golpe.tmj; do
+for room in $rooms golpe.tmj cornisas.tmj; do
   name="${room%.tmj}"
+  # Si el haz por defecto se queda corto, se reintenta con uno más ancho.
   ./target/release/crock-solver "assets/levels/$room" --tuning=assets/tuning.cfg \
-    --out="assets/replays/$name.rep" --secs=30 "$@" 2>/dev/null
+    --out="assets/replays/$name.rep" --secs=30 "$@" 2>/dev/null ||
+  ./target/release/crock-solver "assets/levels/$room" --tuning=assets/tuning.cfg \
+    --out="assets/replays/$name.rep" --secs=40 --beam=2000 "$@" 2>/dev/null
 done

@@ -69,13 +69,15 @@ cargo test --workspace
 | Mover | Flechas / WASD | Cruceta / stick izquierdo (8 direcciones) |
 | Saltar (mantener = más alto) | Espacio / C / Z / K | A (botón sur) |
 | Golpear con la porra (en la dirección pulsada) | X / J / Shift izq. | X (botón oeste) / RB |
+| Agarrarse a una cornisa | Saltar hacia la pared manteniendo la dirección | igual |
+| Desde la cornisa: subir / soltarse | Salto / abajo o dirección contraria | igual |
 | Pausa (continuar, reiniciar, opciones, salir) | Esc | Start |
 | Reiniciar sala | R | |
 | Overlay de métricas (también en Opciones) | F1 | |
 | Modo de presentación (vsync → adaptativo → inmediato) | F2 | |
 | Limitador de fps (no, 60, 120, 144, 240, 360) | F3 | |
 | Retardo antes de leer la entrada (0–8 ms) | F4 | |
-| Recargar capítulo (desde disco) / siguiente capítulo | F5 / F6 | |
+| Recargar capítulo (desde disco) / siguiente capítulo (incluye las salas de pruebas: golpe, movimiento, cornisas) | F5 / F6 | |
 | Sala anterior / siguiente | F7 / F8 | |
 | Ventana → sin bordes → exclusiva | F11 / Alt+Enter | |
 

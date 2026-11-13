@@ -264,7 +264,7 @@ fn restart_restores_objects() {
 #[test]
 fn shipped_strike_level_parses() {
     let m = crate::test_util::level("golpe");
-    assert_eq!((m.w, m.h), (40, 23));
+    assert_eq!((m.w, m.h), (44, 24));
     for k in [
         StrikeKind::Rock,
         StrikeKind::Fragile,

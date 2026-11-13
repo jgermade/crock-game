@@ -53,7 +53,7 @@ const HOLD: Input = Input {
 #[test]
 fn shipped_test_level_parses() {
     let m = crate::test_util::level("movimiento");
-    assert_eq!((m.w, m.h), (40, 23));
+    assert_eq!((m.w, m.h), (44, 24));
 }
 
 #[test]

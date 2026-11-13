@@ -67,6 +67,15 @@ pub struct Tuning {
     pub beetle_stun: f32,
     /// Velocidad máxima del murciélago (px/s).
     pub bat_speed: f32,
+
+    /// Agarre de cornisas: 1 activado, 0 desactivado.
+    pub ledge_grab: f32,
+    /// Distancia vertical máxima (px) entre las manos y el borde para agarrarse.
+    pub ledge_reach: f32,
+    /// Velocidad de subida (px/s) por encima de la cual no se agarra.
+    pub ledge_rise: f32,
+    /// Tiempo tras soltarse o saltar antes de poder volver a agarrarse (s).
+    pub ledge_regrab: f32,
 }
 
 impl Default for Tuning {
@@ -103,6 +112,10 @@ impl Default for Tuning {
             beetle_speed: 20.0,
             beetle_stun: 1.5,
             bat_speed: 30.0,
+            ledge_grab: 1.0,
+            ledge_reach: 6.0,
+            ledge_rise: 30.0,
+            ledge_regrab: 0.25,
         }
     }
 }
@@ -141,6 +154,10 @@ impl Tuning {
             "beetle_speed" => &mut self.beetle_speed,
             "beetle_stun" => &mut self.beetle_stun,
             "bat_speed" => &mut self.bat_speed,
+            "ledge_grab" => &mut self.ledge_grab,
+            "ledge_reach" => &mut self.ledge_reach,
+            "ledge_rise" => &mut self.ledge_rise,
+            "ledge_regrab" => &mut self.ledge_regrab,
             _ => return None,
         })
     }

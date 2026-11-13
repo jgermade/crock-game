@@ -60,6 +60,14 @@ o cambiar constantes, regenéralas con:
 tools/solve_all.sh
 ```
 
+## Bocetos ASCII (la fuente de las salas incluidas)
+
+Las salas del juego se generan desde bocetos en `assets/src/salas/*.txt` con
+`tools/build_rooms.sh` (que llama a `tools/ascii2tmj.py`). Ese script
+sobrescribe los `.tmj`: si editas una sala en Tiled, o llevas el cambio al
+boceto o dejas de regenerarla. Las salas llevan paredes exteriores de 3 tiles
+de grosor (para las rocas grandes); el espacio de juego no cambia.
+
 ## Prototipar en ASCII
 
 `tools/ascii2tmj.py` convierte una sala en texto (mismos caracteres que los

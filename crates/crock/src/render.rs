@@ -365,7 +365,11 @@ fn draw_player(
     if let Some(s) = &gfx.crock {
         use crate::gfx::crock_frames as cf;
         let mut flip = facing_left;
-        let frame = if p.swing > 0 {
+        let frame = if p.hanging != 0 {
+            // Colgado de la cornisa: brazo arriba, mirando a la pared.
+            flip = p.hanging < 0;
+            cf::JUMP
+        } else if p.swing > 0 {
             match p.strike_dir {
                 (_, y) if y < 0 => cf::STRIKE_UP,
                 (_, y) if y > 0 => cf::STRIKE_DOWN,

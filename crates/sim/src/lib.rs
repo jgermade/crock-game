@@ -236,6 +236,8 @@ mod test_util;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tests_ledge;
+#[cfg(test)]
 mod tests_replays;
 #[cfg(test)]
 mod tests_rooms;

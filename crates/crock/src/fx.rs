@@ -172,7 +172,8 @@ impl Fx {
             SimEvent::Whiff
             | SimEvent::ChapterComplete
             | SimEvent::Jump
-            | SimEvent::Land { .. } => {}
+            | SimEvent::Land { .. }
+            | SimEvent::Grab { .. } => {}
         }
     }
 

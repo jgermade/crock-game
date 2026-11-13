@@ -558,6 +558,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 SimEvent::Strike { .. } if settings.rumble => input.rumble(0.35, 0.6, 70),
                 SimEvent::Death { .. } if settings.rumble => input.rumble(0.8, 0.4, 180),
+                SimEvent::Grab { .. } if settings.rumble => input.rumble(0.2, 0.1, 40),
                 SimEvent::Land { speed } if settings.rumble && speed > 200.0 => {
                     input.rumble(0.25, 0.0, 50)
                 }

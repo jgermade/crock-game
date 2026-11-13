@@ -62,7 +62,8 @@ def wall_rocks(rows, solid, hashed):
         return not solid(x - 1, y) or not solid(x + 1, y)
 
     def near_face(x, y):
-        return face(x, y) or (0 <= x < w and (face(x - 1, y) and solid(x - 1, y) or face(x + 1, y) and solid(x + 1, y)))
+        # Hasta dos celdas de la cara: las paredes gruesas llevan rocas grandes.
+        return any(0 <= x + dx < w and solid(x + dx, y) and face(x + dx, y) for dx in (-2, -1, 0, 1, 2))
 
     def put(cells, ids):
         for (x, y), t in zip(cells, ids):

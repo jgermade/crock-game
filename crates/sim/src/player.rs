@@ -1,5 +1,5 @@
 use crate::strike::{Hit, SimEvent, Strikeable};
-use crate::{DT, Input, TileMap, Tuning, secs_to_ticks};
+use crate::{DT, Input, TILE, Tile, TileMap, Tuning, secs_to_ticks};
 
 /// Caja de colisión en píxeles enteros.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -50,6 +50,13 @@ pub struct Player {
     pub strike_aim: (i8, i8),
     /// Dentro de fuego: la porra arde y no hay golpes.
     pub burning: bool,
+    /// Colgado de una cornisa: lado de la pared (-1 o 1), 0 si no.
+    pub hanging: i8,
+    /// Ticks hasta poder volver a agarrarse (tras soltarse o saltar).
+    pub regrab: u32,
+    /// Ticks en los que el salto variable se mantiene aunque se suelte el
+    /// botón (al subir de una cornisa basta un toque).
+    force_rise: u32,
 }
 
 impl Player {
@@ -79,6 +86,9 @@ impl Player {
             strike_buffer: 0,
             strike_aim: (0, 0),
             burning: false,
+            hanging: 0,
+            regrab: 0,
+            force_rise: 0,
         }
     }
 
@@ -179,6 +189,35 @@ impl Player {
         let floating = self.float > 0;
         self.float = self.float.saturating_sub(1);
 
+        // --- Colgado de una cornisa ---------------------------------------
+        self.regrab = self.regrab.saturating_sub(1);
+        if self.hanging != 0 {
+            let d = self.hanging;
+            if hit.is_some() || floating {
+                // Un golpe le saca de la cornisa.
+                self.hanging = 0;
+            } else if self.jump_buffer > 0 {
+                // Salto desde la cornisa: sube y se mete encima.
+                self.hanging = 0;
+                self.regrab = secs_to_ticks(t.ledge_regrab);
+                self.jump_buffer = 0;
+                self.vel = (t.run_speed * 0.6 * d as f32, -t.jump_speed);
+                self.var_jump_speed = self.vel.1;
+                self.var_jump = secs_to_ticks(t.var_jump_time);
+                self.force_rise = secs_to_ticks(0.1);
+                events.push(SimEvent::Jump);
+                return self.finish_move(map, hit);
+            } else if input.y > 0 || input.x == -d {
+                // Soltarse: abajo o la dirección contraria.
+                self.hanging = 0;
+                self.regrab = secs_to_ticks(t.ledge_regrab);
+            } else {
+                self.vel = (0.0, 0.0);
+                self.facing = d;
+                return hit;
+            }
+        }
+
         // --- Horizontal ---------------------------------------------------
         if input.x != 0 {
             self.facing = input.x;
@@ -214,8 +253,10 @@ impl Player {
         }
 
         // --- Salto variable -----------------------------------------------
+        let forced = self.force_rise > 0;
+        self.force_rise = self.force_rise.saturating_sub(1);
         if self.var_jump > 0 {
-            if input.jump_held {
+            if input.jump_held || forced {
                 self.vel.1 = self.vel.1.min(self.var_jump_speed);
                 self.var_jump -= 1;
             } else {
@@ -235,7 +276,57 @@ impl Player {
             events.push(SimEvent::Jump);
         }
 
-        self.finish_move(map, hit)
+        let hit = self.finish_move(map, hit);
+        self.try_grab(map, t, input, events);
+        hit
+    }
+
+    /// Agarre de cornisa: en el aire, empujando hacia una pared cuyo borde
+    /// superior queda a la altura de las manos, se cuelga de él.
+    fn try_grab(&mut self, map: &TileMap, t: &Tuning, input: &Input, events: &mut Vec<SimEvent>) {
+        let d = input.x;
+        if t.ledge_grab <= 0.0
+            || d == 0
+            || self.on_ground
+            || self.regrab > 0
+            || self.hanging != 0
+            || self.vel.1 < -t.ledge_rise
+            || !self.solid_at(map, d as i32, 0)
+        {
+            return;
+        }
+        // Columna de píxeles justo al lado, en la dirección de la pared.
+        let wall_x = if d > 0 {
+            self.pos.0 + Self::W
+        } else {
+            self.pos.0 - 1
+        };
+        let tx = wall_x.div_euclid(TILE);
+        let reach = t.ledge_reach.round() as i32;
+        let ty0 = (self.pos.1 - reach).div_euclid(TILE);
+        let ty1 = (self.pos.1 + reach).div_euclid(TILE) + 1;
+        for ty in ty0..=ty1 {
+            let ledge_y = ty * TILE;
+            if (ledge_y - self.pos.1).abs() > reach
+                || map.tile(tx, ty) != Tile::Solid
+                || map.tile(tx, ty - 1) == Tile::Solid
+            {
+                continue;
+            }
+            // Las manos un píxel por encima del borde.
+            let ny = ledge_y - 1;
+            if map.solid_in_rect(self.pos.0, ny, Self::W, Self::H) {
+                continue;
+            }
+            self.pos.1 = ny;
+            self.rem = (0.0, 0.0);
+            self.vel = (0.0, 0.0);
+            self.var_jump = 0;
+            self.hanging = d;
+            self.facing = d;
+            events.push(SimEvent::Grab { at: self.center() });
+            return;
+        }
     }
 
     fn finish_move(&mut self, map: &TileMap, hit: Option<Hit>) -> Option<Hit> {
