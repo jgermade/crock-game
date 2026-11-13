@@ -3,7 +3,7 @@
 Platformer 2D de precisión: Crock, un cavernícola melenudo con una porra que,
 en lugar de doble salto, **golpea objetos para impulsarse**. Ver [docs/ROADMAP.md](docs/ROADMAP.md).
 
-Estado: Fases 0–2 hechas; **Fase 3**: capítulo 1 jugable (5 salas en Tiled), enemigos, pinchos, fuego, muerte y reinicio instantáneo, pixel art y cámara.
+Estado: Fases 0–3 hechas (capítulo 1 jugable). **Fase 4**: audio de baja latencia, menús (título, pausa, opciones) y opciones de pantalla y mando guardadas; falta el ajuste en hardware real y decidir lo de Steam.
 
 ![Pixel art de cROCK](docs/arte.png)
 
@@ -34,8 +34,8 @@ cargo run --release -p crock
 ```
 
 Opciones: `--vsync=on|adaptive|off`, `--fps=N` (limitador), `--fullscreen`
-(exclusiva), `--chapter=N|nombre`, `--room=N`, `--overlay`. Grabar y
-reproducir partidas:
+(exclusiva), `--chapter=N|nombre`, `--room=N`, `--overlay`, `--no-menu`
+(empezar jugando, sin título). Grabar y reproducir partidas:
 `--record=partida.rep` (guarda al salir, desde el último reinicio) y
 `--replay=partida.rep`. Para pruebas automáticas: `--frames=N`, `--autoplay`,
 `--screenshot=out.bmp`.
@@ -58,8 +58,9 @@ cargo test --workspace
 | Mover | Flechas / WASD | Cruceta / stick izquierdo (8 direcciones) |
 | Saltar (mantener = más alto) | Espacio / C / Z / K | A (botón sur) |
 | Golpear con la porra (en la dirección pulsada) | X / J / Shift izq. | X (botón oeste) / RB |
-| Reiniciar | R | |
-| Overlay de métricas | F1 | |
+| Pausa (continuar, reiniciar, opciones, salir) | Esc | Start |
+| Reiniciar sala | R | |
+| Overlay de métricas (también en Opciones) | F1 | |
 | Modo de presentación (vsync → adaptativo → inmediato) | F2 | |
 | Limitador de fps (no, 60, 120, 144, 240, 360) | F3 | |
 | Retardo antes de leer la entrada (0–8 ms) | F4 | |
@@ -102,6 +103,22 @@ positivo en `tuning.cfg` y guardar.
 Morir (pinchos, enemigos, caer al vacío) reinicia la sala al instante; el HUD
 cuenta las muertes del capítulo. Los pinchos sólo matan si te mueves contra
 ellos. Cómo hacer salas nuevas: [docs/NIVELES.md](docs/NIVELES.md).
+
+## Menús, opciones y audio (Fase 4)
+
+Al arrancar sale la pantalla de título (Jugar, elegir capítulo, Opciones,
+Salir); Esc o Start pausan. Las **opciones** se guardan en el directorio de
+preferencias del usuario (`opciones.cfg`; en Linux, `~/.local/share/crock/crock/`):
+volumen, pantalla (ventana / sin bordes / exclusiva), sincronía (vsync /
+adaptativa / inmediata), escalado (llenar con filtro de pixel art / múltiplos
+enteros), límite de fps, zona muerta del stick, botón de golpe en el mando
+(X o B, además de RB), vibración y métricas.
+
+El **audio** son efectos sintetizados al arrancar (salto, aterrizaje, un golpe
+distinto por tipo de objeto, golpe al aire, rotura, bicho, quemadura, muerte,
+sala, menú), mezclados en el hilo de audio de SDL con un buffer de 256
+muestras (~5 ms). El hilo principal sólo envía órdenes por un canal: nunca
+espera al audio.
 
 ## Latencia: qué hace el bucle
 

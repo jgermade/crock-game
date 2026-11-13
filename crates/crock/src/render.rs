@@ -378,7 +378,26 @@ fn draw_player(
 }
 
 pub fn text(canvas: &mut WindowCanvas, x: f32, y: f32, s: &str) {
-    if let Ok(c) = CString::new(s) {
+    // La fuente de depuración de SDL sólo tiene ASCII: quitar tildes.
+    let ascii: String = s
+        .chars()
+        .map(|c| match c {
+            'á' | 'à' => 'a',
+            'é' | 'è' => 'e',
+            'í' => 'i',
+            'ó' | 'ò' => 'o',
+            'ú' | 'ü' => 'u',
+            'ñ' => 'n',
+            'Á' => 'A',
+            'É' => 'E',
+            'Í' => 'I',
+            'Ó' => 'O',
+            'Ú' => 'U',
+            'Ñ' => 'N',
+            c => c,
+        })
+        .collect();
+    if let Ok(c) = CString::new(ascii) {
         unsafe { sys::render::SDL_RenderDebugText(canvas.raw(), x, y, c.as_ptr()) };
     }
 }

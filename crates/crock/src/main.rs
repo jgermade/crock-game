@@ -2,90 +2,33 @@
 //!
 //! Camino crítico en un solo hilo: eventos → simulación a paso fijo → render
 //! interpolado → present. Nada más se ejecuta entre leer la entrada y
-//! simular.
+//! simular. El único hilo auxiliar es el de audio (de SDL), que nunca bloquea
+//! a este.
 
 mod assets;
 mod audio;
 mod fx;
 mod gfx;
 mod input;
+mod menu;
 mod render;
+mod settings;
 mod stats;
 
+use std::collections::VecDeque;
 use std::time::Duration;
 
-use crock_sim::{DT_NS, SIM_HZ, World, step};
+use crock_sim::{DT_NS, SIM_HZ, SimEvent, World, step};
 use sdl3::event::{Event, WindowEvent};
 use sdl3::keyboard::{Mod, Scancode};
 use sdl3::sys;
 
+use crate::audio::{Audio, Sfx};
 use crate::input::InputState;
+use crate::menu::{Action, Menu, Nav, Page};
+use crate::settings::{FPS_CAPS, Fullscreen, PresentMode, Settings, cycle};
 use crate::stats::Stats;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum PresentMode {
-    VSync,
-    Adaptive,
-    Immediate,
-}
-
-impl PresentMode {
-    fn sdl_value(self) -> i32 {
-        match self {
-            Self::VSync => 1,
-            Self::Adaptive => sys::render::SDL_RENDERER_VSYNC_ADAPTIVE,
-            Self::Immediate => sys::render::SDL_RENDERER_VSYNC_DISABLED,
-        }
-    }
-    fn next(self) -> Self {
-        match self {
-            Self::VSync => Self::Adaptive,
-            Self::Adaptive => Self::Immediate,
-            Self::Immediate => Self::VSync,
-        }
-    }
-    fn label(self) -> &'static str {
-        match self {
-            Self::VSync => "vsync",
-            Self::Adaptive => "adaptativo",
-            Self::Immediate => "inmediato (tearing)",
-        }
-    }
-    fn parse(s: &str) -> Option<Self> {
-        match s {
-            "on" | "vsync" => Some(Self::VSync),
-            "adaptive" => Some(Self::Adaptive),
-            "off" | "immediate" => Some(Self::Immediate),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Fullscreen {
-    Windowed,
-    Borderless,
-    Exclusive,
-}
-
-impl Fullscreen {
-    fn next(self) -> Self {
-        match self {
-            Self::Windowed => Self::Borderless,
-            Self::Borderless => Self::Exclusive,
-            Self::Exclusive => Self::Windowed,
-        }
-    }
-    fn label(self) -> &'static str {
-        match self {
-            Self::Windowed => "ventana",
-            Self::Borderless => "sin bordes",
-            Self::Exclusive => "exclusiva",
-        }
-    }
-}
-
-const FPS_CAPS: [u32; 6] = [0, 60, 120, 144, 240, 360];
 const FRAME_DELAYS_MS: [u32; 6] = [0, 1, 2, 4, 6, 8];
 
 fn now_ns() -> u64 {
@@ -110,8 +53,8 @@ fn wait_until(deadline_ns: u64) {
 }
 
 struct Options {
-    present: PresentMode,
-    fps_cap: u32,
+    present: Option<PresentMode>,
+    fps_cap: Option<u32>,
     fullscreen: bool,
     /// Salir tras N frames (pruebas automáticas).
     frames: Option<u64>,
@@ -122,18 +65,21 @@ struct Options {
     /// Capítulo inicial (índice o parte del nombre) y sala (desde 1).
     chapter: String,
     room: usize,
-    /// Empezar con el overlay de métricas visible.
     overlay: bool,
     /// Reproducir entradas grabadas (una por tick).
     replay: Option<String>,
     /// Grabar las entradas desde el último reinicio al salir.
     record: Option<String>,
+    /// Empezar jugando, sin pantalla de título.
+    no_menu: bool,
+    /// Pantalla a capturar con --screenshot: título, pausa u opciones.
+    show_menu: Option<Page>,
 }
 
 fn parse_args() -> Options {
     let mut o = Options {
-        present: PresentMode::VSync,
-        fps_cap: 0,
+        present: None,
+        fps_cap: None,
         fullscreen: false,
         frames: None,
         screenshot: None,
@@ -143,12 +89,14 @@ fn parse_args() -> Options {
         overlay: false,
         replay: None,
         record: None,
+        no_menu: false,
+        show_menu: None,
     };
     for a in std::env::args().skip(1) {
         let (k, v) = a.split_once('=').unwrap_or((a.as_str(), ""));
         match k {
-            "--vsync" => o.present = PresentMode::parse(v).unwrap_or(o.present),
-            "--fps" => o.fps_cap = v.parse().unwrap_or(0),
+            "--vsync" => o.present = PresentMode::parse(v),
+            "--fps" => o.fps_cap = v.parse().ok(),
             "--fullscreen" => o.fullscreen = true,
             "--frames" => o.frames = v.parse().ok(),
             "--screenshot" => o.screenshot = Some(v.to_string()),
@@ -158,52 +106,32 @@ fn parse_args() -> Options {
             "--chapter" => o.chapter = v.to_string(),
             "--room" => o.room = v.parse().unwrap_or(1),
             "--overlay" => o.overlay = true,
+            "--no-menu" => o.no_menu = true,
+            "--menu" => {
+                o.show_menu = match v {
+                    "pause" => Some(Page::Pause),
+                    "options" => Some(Page::Options),
+                    _ => Some(Page::Title),
+                }
+            }
             "-h" | "--help" => {
                 println!(
-                    "crock [--vsync=on|adaptive|off] [--fps=N] [--fullscreen]\n\
-                     \x20     [--chapter=N|nombre] [--room=N] [--overlay]\n\
+                    "crock [--vsync=on|adaptive|off] [--fps=N] [--fullscreen] [--overlay]\n\
+                     \x20     [--chapter=N|nombre] [--room=N] [--no-menu]\n\
                      \x20     [--replay=f] [--record=f]\n\
-                     \x20     [--frames=N] [--screenshot=out.bmp] [--autoplay]"
+                     \x20     [--frames=N] [--screenshot=out.bmp] [--autoplay] [--menu=title|pause|options]"
                 );
                 std::process::exit(0);
             }
             _ => eprintln!("[crock] argumento desconocido: {a}"),
         }
     }
+    // Cualquier opción de pruebas o de sala concreta empieza jugando.
+    if o.replay.is_some() || o.autoplay || o.frames.is_some() || !o.chapter.is_empty() || o.room > 1
+    {
+        o.no_menu = true;
+    }
     o
-}
-
-fn set_present_mode(canvas: &sdl3::render::WindowCanvas, mode: PresentMode) -> PresentMode {
-    if unsafe { sys::render::SDL_SetRenderVSync(canvas.raw(), mode.sdl_value()) } {
-        return mode;
-    }
-    // El adaptativo no está en todos los backends: caer a vsync normal.
-    eprintln!("[crock] modo de presentación {:?} no soportado", mode);
-    unsafe { sys::render::SDL_SetRenderVSync(canvas.raw(), 1) };
-    PresentMode::VSync
-}
-
-fn set_fullscreen(window: &sdl3::video::Window, mode: Fullscreen) {
-    let w = window.raw();
-    unsafe {
-        match mode {
-            Fullscreen::Windowed => {
-                sys::video::SDL_SetWindowFullscreen(w, false);
-            }
-            Fullscreen::Borderless => {
-                sys::video::SDL_SetWindowFullscreenMode(w, std::ptr::null());
-                sys::video::SDL_SetWindowFullscreen(w, true);
-            }
-            Fullscreen::Exclusive => {
-                // Modo nativo del monitor en exclusiva: permite direct scanout
-                // y saltarse el compositor donde el sistema lo soporte.
-                let display = sys::video::SDL_GetDisplayForWindow(w);
-                let dm = sys::video::SDL_GetDesktopDisplayMode(display);
-                sys::video::SDL_SetWindowFullscreenMode(w, dm);
-                sys::video::SDL_SetWindowFullscreen(w, true);
-            }
-        }
-    }
 }
 
 fn renderer_name(canvas: &sdl3::render::WindowCanvas) -> String {
@@ -232,12 +160,52 @@ fn save_screenshot(canvas: &sdl3::render::WindowCanvas, path: &str) {
     }
 }
 
+/// Repetición de navegación con el stick (en menús).
+struct StickNav {
+    dir: (i8, i8),
+    next_ns: u64,
+}
+
+impl StickNav {
+    fn poll(&mut self, dir: (i8, i8), now: u64) -> Option<Nav> {
+        let nav = match dir {
+            (_, -1) => Some(Nav::Up),
+            (_, 1) => Some(Nav::Down),
+            (-1, 0) => Some(Nav::Left),
+            (1, 0) => Some(Nav::Right),
+            _ => None,
+        };
+        if dir != self.dir {
+            self.dir = dir;
+            self.next_ns = now + 400_000_000;
+            return nav;
+        }
+        if nav.is_some() && now >= self.next_ns {
+            self.next_ns = now + 120_000_000;
+            return nav;
+        }
+        None
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opts = parse_args();
+    let mut settings = Settings::load();
+    if let Some(p) = opts.present {
+        settings.present = p;
+    }
+    if let Some(f) = opts.fps_cap {
+        settings.fps_cap = f;
+    }
+    if opts.fullscreen {
+        settings.fullscreen = Fullscreen::Exclusive;
+    }
+    settings.overlay |= opts.overlay;
 
     let sdl = sdl3::init()?;
     let video = sdl.video()?;
     let gamepads = sdl.gamepad()?;
+    let audio = Audio::new(&sdl, settings.volume_f());
 
     let window = video
         .window("cROCK", 1280, 720)
@@ -245,11 +213,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .high_pixel_density()
         .build()?;
     let mut canvas = window.into_canvas();
-    let mut present = set_present_mode(&canvas, opts.present);
-    let mut fullscreen = Fullscreen::Windowed;
-    if opts.fullscreen {
-        fullscreen = Fullscreen::Exclusive;
-        set_fullscreen(canvas.window(), fullscreen);
+    settings.present = settings::apply_present(&canvas, settings.present);
+    if settings.fullscreen != Fullscreen::Windowed {
+        settings::apply_fullscreen(canvas.window(), settings.fullscreen);
     }
     let renderer = renderer_name(&canvas);
 
@@ -270,10 +236,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .unwrap_or(0)
         .min(chapters.len() - 1);
-    let mut world = World::with_rooms(
-        assets::load_chapter(&chapters[chapter])?,
-        Default::default(),
-    );
+    let load = |ch: usize, tuning: crock_sim::Tuning| -> Result<World, String> {
+        Ok(World::with_rooms(
+            assets::load_chapter(&chapters[ch])?,
+            tuning,
+        ))
+    };
+    let mut world = load(chapter, Default::default())?;
     if opts.room > 1 {
         world.goto_room(opts.room - 1);
     }
@@ -286,21 +255,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut input = InputState::new(gamepads);
+    input.deadzone = settings.deadzone_f();
+    input.strike_button = settings.strike_button;
     let mut events = sdl.event_pump()?;
     let mut stats = Stats::new();
     let mut fx = fx::Fx::new();
-    let mut replay: std::collections::VecDeque<crock_sim::Input> = match &opts.replay {
+    let mut replay: VecDeque<crock_sim::Input> = match &opts.replay {
         Some(path) => crock_sim::replay::decode(&std::fs::read_to_string(path)?)?.into(),
         None => Default::default(),
     };
     let mut recording: Vec<crock_sim::Input> = Vec::new();
 
-    let mut show_overlay = opts.overlay;
-    let scaling = render::Scaling::Fill;
-    let mut cap_idx = FPS_CAPS
-        .iter()
-        .position(|&c| c == opts.fps_cap)
-        .unwrap_or(0);
+    let mut menu = Menu::new();
+    if let Some(p) = opts.show_menu {
+        menu.reset_to(Page::Title);
+        if p != Page::Title {
+            menu.reset_to(p);
+        }
+    } else if !opts.no_menu {
+        menu.reset_to(Page::Title);
+    }
+    let mut stick_nav = StickNav {
+        dir: (0, 0),
+        next_ns: 0,
+    };
+
     let mut delay_idx = 0usize;
     let mut message: Option<(String, u64)> = None;
 
@@ -317,7 +296,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if delay_ns > 0 {
             wait_until(last_present_ns + delay_ns);
         }
-        let cap = FPS_CAPS[cap_idx];
+        let cap = settings.fps_cap;
         if cap > 0 {
             let period = 1_000_000_000 / cap as u64;
             wait_until(next_deadline_ns);
@@ -325,8 +304,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         let frame_start = now_ns();
+        let mut settings_changed = false;
 
         // --- Entrada ------------------------------------------------------
+        let mut navs: Vec<Nav> = Vec::new();
         for ev in events.poll_iter() {
             match ev {
                 Event::Quit { .. } => break 'main,
@@ -334,95 +315,183 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     win_event: WindowEvent::CloseRequested,
                     ..
                 } => break 'main,
-                Event::KeyDown {
-                    scancode: Some(sc),
-                    repeat: false,
-                    keymod,
-                    ..
-                } => {
-                    let handled = match sc {
-                        Scancode::Escape => break 'main,
-                        Scancode::R => {
-                            world.restart();
-                            recording.clear();
-                            true
-                        }
-                        Scancode::F1 => {
-                            show_overlay = !show_overlay;
-                            true
-                        }
-                        Scancode::F2 => {
-                            present = set_present_mode(&canvas, present.next());
-                            true
-                        }
-                        Scancode::F3 => {
-                            cap_idx = (cap_idx + 1) % FPS_CAPS.len();
-                            next_deadline_ns = now_ns();
-                            true
-                        }
-                        Scancode::F4 => {
-                            delay_idx = (delay_idx + 1) % FRAME_DELAYS_MS.len();
-                            true
-                        }
-                        Scancode::F5 | Scancode::F6 => {
-                            // F5 recarga el capítulo (misma sala); F6 pasa al siguiente.
-                            let room = if sc == Scancode::F6 {
-                                chapter = (chapter + 1) % chapters.len();
-                                0
-                            } else {
-                                world.room
-                            };
-                            match assets::load_chapter(&chapters[chapter]) {
-                                Ok(rooms) => {
-                                    let (tuning, deaths) = (world.tuning.clone(), world.deaths);
-                                    world = World::with_rooms(rooms, tuning);
-                                    world.deaths = if sc == Scancode::F5 { deaths } else { 0 };
-                                    world.goto_room(room);
-                                    message = Some((chapters[chapter].name.clone(), now_ns()));
-                                }
-                                Err(e) => {
-                                    eprintln!("[crock] {e}");
-                                    message = Some((e, now_ns()));
-                                }
-                            }
-                            recording.clear();
-                            true
-                        }
-                        Scancode::F7 | Scancode::F8 => {
-                            let n = world.rooms.len();
-                            let room = if sc == Scancode::F8 {
-                                world.room + 1
-                            } else {
-                                world.room + n - 1
-                            };
-                            world.goto_room(room % n);
-                            recording.clear();
-                            true
-                        }
-                        Scancode::F11 => {
-                            fullscreen = fullscreen.next();
-                            set_fullscreen(canvas.window(), fullscreen);
-                            true
-                        }
-                        Scancode::Return if keymod.intersects(Mod::LALTMOD | Mod::RALTMOD) => {
-                            fullscreen = if fullscreen == Fullscreen::Windowed {
-                                Fullscreen::Exclusive
-                            } else {
-                                Fullscreen::Windowed
-                            };
-                            set_fullscreen(canvas.window(), fullscreen);
-                            true
-                        }
-                        _ => false,
-                    };
-                    if !handled {
-                        input.handle(&ev);
-                    }
+                _ => {}
+            }
+            if menu.is_open() {
+                if let Some(n) = input::menu_nav(&ev) {
+                    navs.push(n);
                 }
-                ref other => {
-                    input.handle(other);
+                // Mantener al día el estado de teclas y mandos (sueltas, hotplug).
+                if !matches!(ev, Event::KeyDown { .. }) {
+                    input.handle(&ev);
+                }
+                continue;
+            }
+            // Pausa: Esc o Start.
+            let pause = matches!(
+                ev,
+                Event::KeyDown {
+                    scancode: Some(Scancode::Escape),
+                    repeat: false,
+                    ..
+                } | Event::GamepadButtonDown {
+                    button: sdl3::gamepad::Button::Start,
+                    ..
+                }
+            );
+            if pause {
+                menu.open(Page::Pause);
+                audio.play(Sfx::MenuSelect, 0.5);
+                continue;
+            }
+            if let Event::KeyDown {
+                scancode: Some(sc),
+                repeat: false,
+                keymod,
+                ..
+            } = ev
+            {
+                let handled = match sc {
+                    Scancode::R => {
+                        world.restart();
+                        recording.clear();
+                        true
+                    }
+                    Scancode::F1 => {
+                        settings.overlay = !settings.overlay;
+                        settings_changed = true;
+                        true
+                    }
+                    Scancode::F2 => {
+                        settings.present = cycle(&PresentMode::ALL, settings.present, 1);
+                        settings_changed = true;
+                        true
+                    }
+                    Scancode::F3 => {
+                        settings.fps_cap = cycle(&FPS_CAPS, settings.fps_cap, 1);
+                        settings_changed = true;
+                        true
+                    }
+                    Scancode::F4 => {
+                        delay_idx = (delay_idx + 1) % FRAME_DELAYS_MS.len();
+                        true
+                    }
+                    Scancode::F5 | Scancode::F6 => {
+                        // F5 recarga el capítulo (misma sala); F6 pasa al siguiente.
+                        let room = if sc == Scancode::F6 {
+                            chapter = (chapter + 1) % chapters.len();
+                            0
+                        } else {
+                            world.room
+                        };
+                        match load(chapter, world.tuning.clone()) {
+                            Ok(mut w) => {
+                                w.deaths = if sc == Scancode::F5 { world.deaths } else { 0 };
+                                w.goto_room(room);
+                                world = w;
+                                message = Some((chapters[chapter].name.clone(), now_ns()));
+                            }
+                            Err(e) => {
+                                eprintln!("[crock] {e}");
+                                message = Some((e, now_ns()));
+                            }
+                        }
+                        recording.clear();
+                        true
+                    }
+                    Scancode::F7 | Scancode::F8 => {
+                        let n = world.rooms.len();
+                        let room = if sc == Scancode::F8 {
+                            world.room + 1
+                        } else {
+                            world.room + n - 1
+                        };
+                        world.goto_room(room % n);
+                        recording.clear();
+                        true
+                    }
+                    Scancode::F11 => {
+                        settings.fullscreen = cycle(&Fullscreen::ALL, settings.fullscreen, 1);
+                        settings_changed = true;
+                        true
+                    }
+                    Scancode::Return if keymod.intersects(Mod::LALTMOD | Mod::RALTMOD) => {
+                        settings.fullscreen = if settings.fullscreen == Fullscreen::Windowed {
+                            Fullscreen::Exclusive
+                        } else {
+                            Fullscreen::Windowed
+                        };
+                        settings_changed = true;
+                        true
+                    }
+                    _ => false,
+                };
+                if handled {
+                    continue;
                 }
             }
+            input.handle(&ev);
+        }
+
+        // --- Menús ----------------------------------------------------------
+        if menu.is_open() {
+            if let Some(n) = stick_nav.poll(input.menu_direction(), frame_start) {
+                navs.push(n);
+            }
+            for n in navs {
+                let action = menu.nav(n, &mut settings, &mut chapter, chapters.len());
+                match action {
+                    Action::None => {}
+                    Action::Moved => audio.play(Sfx::MenuMove, 0.4),
+                    Action::SettingsChanged => {
+                        audio.play(Sfx::MenuMove, 0.4);
+                        settings_changed = true;
+                    }
+                    Action::ChapterChanged => {
+                        audio.play(Sfx::MenuMove, 0.4);
+                        if let Ok(w) = load(chapter, world.tuning.clone()) {
+                            world = w;
+                        }
+                    }
+                    Action::Play => {
+                        audio.play(Sfx::MenuSelect, 0.6);
+                        if let Ok(w) = load(chapter, world.tuning.clone()) {
+                            world = w;
+                        }
+                        recording.clear();
+                    }
+                    Action::Resume => audio.play(Sfx::MenuSelect, 0.5),
+                    Action::RestartRoom => {
+                        audio.play(Sfx::MenuSelect, 0.5);
+                        world.restart();
+                        recording.clear();
+                    }
+                    Action::ToTitle => {
+                        audio.play(Sfx::MenuSelect, 0.5);
+                        if let Ok(w) = load(chapter, world.tuning.clone()) {
+                            world = w;
+                        }
+                    }
+                    Action::Quit => break 'main,
+                }
+                if !menu.is_open() {
+                    // Que el "aceptar" no se convierta en salto o golpe.
+                    input.clear_latches();
+                    break;
+                }
+            }
+        } else {
+            stick_nav.dir = input.menu_direction();
+        }
+
+        if settings_changed {
+            settings.present = settings::apply_present(&canvas, settings.present);
+            settings::apply_fullscreen(canvas.window(), settings.fullscreen);
+            audio.set_volume(settings.volume_f());
+            input.deadzone = settings.deadzone_f();
+            input.strike_button = settings.strike_button;
+            next_deadline_ns = now_ns();
+            settings.save();
         }
 
         if let Some((t, warns)) = tuning_watch.poll(frame_start) {
@@ -436,10 +505,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             message = Some((msg, frame_start));
         }
 
-        // --- Simulación a paso fijo --------------------------------------
+        // --- Simulación a paso fijo (parada con un menú abierto) ----------
         let now = now_ns();
         let frame_dt = (now - last_ns).min(100_000_000) as f32 / 1e9;
-        acc_ns += (now - last_ns).min(250_000_000);
+        if menu.is_open() {
+            acc_ns = 0;
+        } else {
+            acc_ns += (now - last_ns).min(250_000_000);
+        }
         last_ns = now;
         stats.ticks_this_frame = 0;
         while acc_ns >= DT_NS {
@@ -472,52 +545,74 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             alpha.max(acc_ns as f32 / DT_NS as f32)
         };
 
-        // Efectos visuales a partir de los eventos de la simulación.
+        // Efectos, sonido y vibración a partir de los eventos de la simulación.
         for ev in world.events.drain(..) {
-            if matches!(ev, crock_sim::SimEvent::ChapterComplete) {
-                let msg = format!(
-                    "{} completado - muertes: {}",
-                    chapters[chapter].name, world.deaths
-                );
-                banner = Some((msg, frame_start));
-                world.deaths = 0;
+            match ev {
+                SimEvent::ChapterComplete => {
+                    let msg = format!(
+                        "{} completado - muertes: {}",
+                        chapters[chapter].name, world.deaths
+                    );
+                    banner = Some((msg, frame_start));
+                    world.deaths = 0;
+                }
+                SimEvent::Strike { .. } if settings.rumble => input.rumble(0.35, 0.6, 70),
+                SimEvent::Death { .. } if settings.rumble => input.rumble(0.8, 0.4, 180),
+                SimEvent::Land { speed } if settings.rumble && speed > 200.0 => {
+                    input.rumble(0.25, 0.0, 50)
+                }
+                _ => {}
             }
+            audio.on_event(&ev);
             fx.handle(&ev);
         }
-        fx.update(frame_dt);
+        if !menu.is_open() {
+            fx.update(frame_dt);
+        }
 
         // --- Render -------------------------------------------------------
-        let view = render::draw_world(&mut canvas, &world, alpha, &fx, &gfx, show_overlay, scaling);
-        let hud = [
-            format!(
-                "{} {}/{}",
-                world.map.name,
-                world.room + 1,
-                world.rooms.len()
-            ),
-            format!("muertes {}", world.deaths),
-        ];
-        let banner_text = banner
-            .as_ref()
-            .filter(|(_, t)| frame_start - t < 4_000_000_000)
-            .map(|(m, _)| m.as_str());
-        render::draw_hud(&mut canvas, &view, &hud, banner_text);
-        if show_overlay {
+        let view = render::draw_world(
+            &mut canvas,
+            &world,
+            alpha,
+            &fx,
+            &gfx,
+            settings.overlay,
+            settings.scaling,
+        );
+        if !menu.is_open() || menu.page() == Some(Page::Pause) {
+            let hud = [
+                format!(
+                    "{} {}/{}",
+                    world.map.name,
+                    world.room + 1,
+                    world.rooms.len()
+                ),
+                format!("muertes {}", world.deaths),
+            ];
+            let banner_text = banner
+                .as_ref()
+                .filter(|(_, t)| frame_start - t < 4_000_000_000)
+                .map(|(m, _)| m.as_str());
+            render::draw_hud(&mut canvas, &view, &hud, banner_text);
+        }
+        menu.draw(&mut canvas, &settings, &chapters[chapter].name);
+        if settings.overlay {
             let (favg, fmax) = stats.frame_ms();
             let (wavg, wmax) = stats.work_ms();
             let p = &world.player;
             let mut lines = vec![
                 format!("cROCK  sim {SIM_HZ} Hz  renderer {renderer}"),
                 format!(
-                    "F2 present: {}  F3 cap: {}  F4 delay: {} ms  F11 pantalla: {}",
-                    present.label(),
+                    "F2 sincronia: {}  F3 limite: {}  F4 retardo: {} ms  F11 pantalla: {}",
+                    settings.present.label(),
                     if cap == 0 {
                         "no".to_string()
                     } else {
                         format!("{cap}")
                     },
                     FRAME_DELAYS_MS[delay_idx],
-                    fullscreen.label()
+                    settings.fullscreen.label()
                 ),
                 format!(
                     "frame {favg:5.2} ms (max {fmax:5.2}, {:4.0} fps)  cpu {wavg:4.2} ms (max {wmax:4.2})",
@@ -539,7 +634,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     p.jump_buffer
                 ),
                 format!(
-                    "golpes {}  ventana {:2}  float {:2}  hitstop {:2}  sala {}",
+                    "golpes {}  ventana {:2}  float {:2}  hitstop {:2}  {}",
                     p.strikes, p.strike_window, p.float, world.hitstop, chapters[chapter].name
                 ),
             ];
@@ -550,7 +645,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 format!("mandos: {}", pads.join(", "))
             });
             lines.push(
-                "R reiniciar  F1 overlay  F5 recargar  F6 capitulo  F7/F8 sala  Esc salir".into(),
+                "R reiniciar  F1 metricas  F5 recargar  F6 capitulo  F7/F8 sala  Esc pausa".into(),
             );
             if let Some((m, t)) = &message
                 && frame_start - t < 3_000_000_000

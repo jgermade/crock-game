@@ -10,8 +10,8 @@ use sdl3::gamepad::{Axis, Button, Gamepad};
 use sdl3::joystick::JoystickId;
 use sdl3::keyboard::Scancode;
 
-/// Zona muerta del stick (fracción de 1.0).
-const STICK_DEADZONE: f32 = 0.35;
+use crate::menu::Nav;
+use crate::settings::StrikeButton;
 
 #[derive(Default)]
 struct Pad {
@@ -45,6 +45,9 @@ pub struct InputState {
     strike_latch: Option<(i8, i8)>,
     /// Timestamp (ns, reloj de SDL) de la última pulsación aún no presentada.
     pub pending_press_ts: Option<u64>,
+    /// Zona muerta del stick (fracción de 1.0).
+    pub deadzone: f32,
+    pub strike_button: StrikeButton,
 }
 
 fn is_strike_key(sc: Scancode) -> bool {
@@ -71,6 +74,8 @@ impl InputState {
             jump_latch: false,
             strike_latch: None,
             pending_press_ts: None,
+            deadzone: 0.35,
+            strike_button: StrikeButton::West,
         }
     }
 
@@ -168,6 +173,7 @@ impl InputState {
 
     /// Devuelve la acción si el botón es de salto o golpe y se acaba de pulsar.
     fn set_button(&mut self, which: JoystickId, b: Button, down: bool) -> Option<Press> {
+        let strike_button = self.strike_button;
         let p = &mut self.open.get_mut(&which.raw())?.1;
         match b {
             Button::DPadLeft => p.left = down,
@@ -178,7 +184,13 @@ impl InputState {
                 p.jump = down;
                 return down.then_some(Press::Jump);
             }
-            Button::West | Button::RightShoulder => return down.then_some(Press::Strike),
+            Button::RightShoulder => return down.then_some(Press::Strike),
+            Button::West if strike_button == StrikeButton::West => {
+                return down.then_some(Press::Strike);
+            }
+            Button::East if strike_button == StrikeButton::East => {
+                return down.then_some(Press::Strike);
+            }
             _ => {}
         }
         None
@@ -189,11 +201,31 @@ impl InputState {
         let mut x = self.k_right as i8 - self.k_left as i8;
         let mut y = self.k_down as i8 - self.k_up as i8;
         for (_, p) in self.open.values() {
-            let (sx, sy) = stick_8dir(p.lx, p.ly);
+            let (sx, sy) = stick_8dir(p.lx, p.ly, self.deadzone);
             x += p.right as i8 - p.left as i8 + sx;
             y += p.down as i8 - p.up as i8 + sy;
         }
         (x.signum(), y.signum())
+    }
+
+    /// Olvida las pulsaciones pendientes (al salir de un menú, para que el
+    /// "aceptar" no se convierta en un salto).
+    pub fn clear_latches(&mut self) {
+        self.jump_latch = false;
+        self.strike_latch = None;
+        self.pending_press_ts = None;
+    }
+
+    /// Vibración en todos los mandos abiertos (intensidades 0..1).
+    pub fn rumble(&mut self, low: f32, high: f32, ms: u32) {
+        for (g, _) in self.open.values_mut() {
+            let _ = g.set_rumble((low * 65535.0) as u16, (high * 65535.0) as u16, ms);
+        }
+    }
+
+    /// Dirección actual (para navegar menús con el stick).
+    pub fn menu_direction(&self) -> (i8, i8) {
+        self.direction()
     }
 
     /// Construye la entrada del próximo tick y consume los flancos latcheados.
@@ -223,8 +255,8 @@ impl InputState {
 
 /// Discretiza el stick a 8 direcciones por sectores de 45° (más justo que
 /// umbralizar cada eje por separado: las diagonales tienen el mismo ancho).
-fn stick_8dir(x: f32, y: f32) -> (i8, i8) {
-    if x * x + y * y < STICK_DEADZONE * STICK_DEADZONE {
+fn stick_8dir(x: f32, y: f32, deadzone: f32) -> (i8, i8) {
+    if x * x + y * y < deadzone * deadzone {
         return (0, 0);
     }
     let sector = ((y.atan2(x) / std::f32::consts::FRAC_PI_4).round() as i32).rem_euclid(8);
@@ -241,17 +273,47 @@ fn stick_8dir(x: f32, y: f32) -> (i8, i8) {
     DIRS[sector as usize]
 }
 
+/// Traduce un evento a una acción de menú (teclado y botones del mando).
+/// `repeat` de teclado sí cuenta, para mantener pulsado.
+pub fn menu_nav(ev: &Event) -> Option<Nav> {
+    match *ev {
+        Event::KeyDown {
+            scancode: Some(sc), ..
+        } => match sc {
+            Scancode::Up | Scancode::W => Some(Nav::Up),
+            Scancode::Down | Scancode::S => Some(Nav::Down),
+            Scancode::Left | Scancode::A => Some(Nav::Left),
+            Scancode::Right | Scancode::D => Some(Nav::Right),
+            Scancode::Return | Scancode::KpEnter | Scancode::Space | Scancode::C | Scancode::Z => {
+                Some(Nav::Confirm)
+            }
+            Scancode::Escape | Scancode::Backspace | Scancode::X => Some(Nav::Back),
+            _ => None,
+        },
+        Event::GamepadButtonDown { button, .. } => match button {
+            Button::DPadUp => Some(Nav::Up),
+            Button::DPadDown => Some(Nav::Down),
+            Button::DPadLeft => Some(Nav::Left),
+            Button::DPadRight => Some(Nav::Right),
+            Button::South => Some(Nav::Confirm),
+            Button::East | Button::Start | Button::Back => Some(Nav::Back),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::stick_8dir;
 
     #[test]
     fn stick_sectors() {
-        assert_eq!(stick_8dir(0.1, 0.1), (0, 0));
-        assert_eq!(stick_8dir(1.0, 0.0), (1, 0));
-        assert_eq!(stick_8dir(0.7, 0.7), (1, 1));
-        assert_eq!(stick_8dir(0.0, -1.0), (0, -1));
-        assert_eq!(stick_8dir(-1.0, 0.05), (-1, 0));
-        assert_eq!(stick_8dir(-0.6, -0.7), (-1, -1));
+        assert_eq!(stick_8dir(0.1, 0.1, 0.35), (0, 0));
+        assert_eq!(stick_8dir(1.0, 0.0, 0.35), (1, 0));
+        assert_eq!(stick_8dir(0.7, 0.7, 0.35), (1, 1));
+        assert_eq!(stick_8dir(0.0, -1.0, 0.35), (0, -1));
+        assert_eq!(stick_8dir(-1.0, 0.05, 0.35), (-1, 0));
+        assert_eq!(stick_8dir(-0.6, -0.7, 0.35), (-1, -1));
     }
 }

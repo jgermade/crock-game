@@ -21,7 +21,8 @@ En lugar del doble salto, el personaje **golpea con la porra contra algo para im
 | Simulación | 240 Hz fijos, render interpolado |
 | Niveles | **Tiled** (`.tmj` JSON), capítulos como listas de salas; solver para comprobar que se pueden pasar |
 | Arte | Pixel art a 16 px por tile (doble resolución que la física, que va a 8) |
-| Protagonista | **Crock**: cavernícola delgado con melena larga que le cubre el cuerpo (asoman cara, brazos y pies) |
+| Protagonista | **Crock**: cavernícola cabezón y bonachón, melena oscura y despeinada, barba larga, ropa de pelo, brazos fuertes y pies grandes |
+| Cámara | Vista de 32×18 tiles (16:9) que sigue a Crock; el mundo se dibuja a resolución de arte y se escala con filtro de pixel art |
 
 ## 2. Mecánica del golpe
 
@@ -80,9 +81,9 @@ En lugar del doble salto, el personaje **golpea con la porra contra algo para im
 - [x] Primeros niveles jugables *(capítulo 1, 5 salas, comprobadas con el solver)*
 
 ### Fase 4 — Pulido y publicación
-- [ ] Audio con baja latencia
-- [ ] Menús, opciones de mando y pantalla
-- [ ] Ajuste fino de latencia en hardware real (144 Hz+, VRR)
+- [x] Audio con baja latencia *(efectos sintetizados, mezclador propio, buffer de ~5 ms)*
+- [x] Menús, opciones de mando y pantalla *(título, pausa, opciones guardadas; vibración)*
+- [ ] Ajuste fino de latencia en hardware real (144 Hz+, VRR) *(las herramientas están: overlay F1, modos de sincronía, límite de fps, retardo F4; falta medir en máquinas reales)*
 - [ ] Steam / Steam Deck (si se decide publicar)
 
 ## 6. Dependencias entre tareas
