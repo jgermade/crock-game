@@ -1,3 +1,5 @@
+use crate::strike::StrikeKind;
+
 /// Tamaño de una celda en píxeles de juego.
 pub const TILE: i32 = 8;
 
@@ -13,6 +15,7 @@ pub enum Tile {
 /// - `#` sólido
 /// - `.` o espacio: vacío
 /// - `P` punto de aparición del jugador (sus pies, centrados en la celda)
+/// - `o` roca, `x` roca frágil, `b` hueso colgante, `m` musgo (golpeables)
 #[derive(Clone, Debug)]
 pub struct TileMap {
     pub w: i32,
@@ -20,6 +23,8 @@ pub struct TileMap {
     tiles: Vec<Tile>,
     /// Punto de aparición en píxeles (centro inferior de la caja del jugador).
     pub spawn: (i32, i32),
+    /// Objetos golpeables iniciales: tipo y centro en píxeles.
+    pub objects: Vec<(StrikeKind, (i32, i32))>,
 }
 
 impl TileMap {
@@ -36,6 +41,7 @@ impl TileMap {
         let h = rows.len() as i32;
         let mut tiles = vec![Tile::Empty; (w * h) as usize];
         let mut spawn = None;
+        let mut objects = Vec::new();
         for (ty, row) in rows.iter().enumerate() {
             for (tx, c) in row.chars().enumerate() {
                 let i = ty * w as usize + tx;
@@ -45,12 +51,23 @@ impl TileMap {
                     'P' => {
                         spawn = Some((tx as i32 * TILE + TILE / 2, (ty as i32 + 1) * TILE));
                     }
+                    c if StrikeKind::from_char(c).is_some() => {
+                        let kind = StrikeKind::from_char(c).unwrap();
+                        let center = (tx as i32 * TILE + TILE / 2, ty as i32 * TILE + TILE / 2);
+                        objects.push((kind, center));
+                    }
                     other => return Err(format!("carácter desconocido '{other}' en ({tx},{ty})")),
                 }
             }
         }
         let spawn = spawn.ok_or("el mapa no tiene punto de aparición 'P'")?;
-        Ok(Self { w, h, tiles, spawn })
+        Ok(Self {
+            w,
+            h,
+            tiles,
+            spawn,
+            objects,
+        })
     }
 
     pub fn width_px(&self) -> i32 {

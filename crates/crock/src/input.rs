@@ -24,6 +24,12 @@ struct Pad {
     jump: bool,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Press {
+    Jump,
+    Strike,
+}
+
 pub struct InputState {
     gamepads: GamepadSubsystem,
     open: HashMap<u32, (Gamepad, Pad)>,
@@ -35,8 +41,14 @@ pub struct InputState {
     k_jump: bool,
     /// Flanco de salto pendiente de consumir por el próximo tick.
     jump_latch: bool,
+    /// Golpe pendiente, con la dirección capturada en el instante de pulsar.
+    strike_latch: Option<(i8, i8)>,
     /// Timestamp (ns, reloj de SDL) de la última pulsación aún no presentada.
     pub pending_press_ts: Option<u64>,
+}
+
+fn is_strike_key(sc: Scancode) -> bool {
+    matches!(sc, Scancode::X | Scancode::J | Scancode::LShift)
 }
 
 fn is_jump_key(sc: Scancode) -> bool {
@@ -57,6 +69,7 @@ impl InputState {
             k_down: false,
             k_jump: false,
             jump_latch: false,
+            strike_latch: None,
             pending_press_ts: None,
         }
     }
@@ -68,8 +81,13 @@ impl InputState {
             .collect()
     }
 
-    fn press(&mut self, ts: u64) {
-        self.jump_latch = true;
+    fn press(&mut self, what: Press, ts: u64) {
+        match what {
+            Press::Jump => self.jump_latch = true,
+            // Apuntado instantáneo: la dirección se fija aquí, al llegar el
+            // evento, no cuando el tick lo procese.
+            Press::Strike => self.strike_latch = Some(self.direction()),
+        }
         self.pending_press_ts.get_or_insert(ts);
     }
 
@@ -84,7 +102,9 @@ impl InputState {
             } => {
                 self.set_key(sc, true);
                 if is_jump_key(sc) {
-                    self.press(timestamp);
+                    self.press(Press::Jump, timestamp);
+                } else if is_strike_key(sc) {
+                    self.press(Press::Strike, timestamp);
                 }
                 true
             }
@@ -109,8 +129,8 @@ impl InputState {
                 button,
                 timestamp,
             } => {
-                if self.set_button(which, button, true) {
-                    self.press(timestamp);
+                if let Some(what) = self.set_button(which, button, true) {
+                    self.press(what, timestamp);
                 }
                 true
             }
@@ -146,11 +166,9 @@ impl InputState {
         }
     }
 
-    /// Devuelve `true` si el botón es de salto y se acaba de pulsar.
-    fn set_button(&mut self, which: JoystickId, b: Button, down: bool) -> bool {
-        let Some((_, p)) = self.open.get_mut(&which.raw()) else {
-            return false;
-        };
+    /// Devuelve la acción si el botón es de salto o golpe y se acaba de pulsar.
+    fn set_button(&mut self, which: JoystickId, b: Button, down: bool) -> Option<Press> {
+        let p = &mut self.open.get_mut(&which.raw())?.1;
         match b {
             Button::DPadLeft => p.left = down,
             Button::DPadRight => p.right = down,
@@ -158,31 +176,47 @@ impl InputState {
             Button::DPadDown => p.down = down,
             Button::South => {
                 p.jump = down;
-                return down;
+                return down.then_some(Press::Jump);
             }
+            Button::West | Button::RightShoulder => return down.then_some(Press::Strike),
             _ => {}
         }
-        false
+        None
     }
 
-    /// Construye la entrada del próximo tick y consume los flancos latcheados.
-    pub fn take_tick_input(&mut self) -> Input {
+    /// Dirección digital actual (teclado + mandos), en 8 direcciones.
+    fn direction(&self) -> (i8, i8) {
         let mut x = self.k_right as i8 - self.k_left as i8;
         let mut y = self.k_down as i8 - self.k_up as i8;
-        let mut jump_held = self.k_jump;
         for (_, p) in self.open.values() {
             let (sx, sy) = stick_8dir(p.lx, p.ly);
             x += p.right as i8 - p.left as i8 + sx;
             y += p.down as i8 - p.up as i8 + sy;
-            jump_held |= p.jump;
         }
+        (x.signum(), y.signum())
+    }
+
+    /// Construye la entrada del próximo tick y consume los flancos latcheados.
+    pub fn take_tick_input(&mut self) -> Input {
+        let (x, y) = self.direction();
+        let jump_held = self.k_jump || self.open.values().any(|(_, p)| p.jump);
+        // Si al pulsar no había dirección pero llegó en el mismo frame, usar la
+        // del tick (pulsar golpe y dirección "a la vez" nunca es simultáneo).
+        let (aim_x, aim_y) = match self.strike_latch {
+            Some(aim) if aim != (0, 0) => aim,
+            _ => (x, y),
+        };
         let input = Input {
-            x: x.signum(),
-            y: y.signum(),
+            x,
+            y,
             jump_held: jump_held || self.jump_latch,
             jump_pressed: self.jump_latch,
+            strike_pressed: self.strike_latch.is_some(),
+            aim_x,
+            aim_y,
         };
         self.jump_latch = false;
+        self.strike_latch = None;
         input
     }
 }

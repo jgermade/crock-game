@@ -1,3 +1,4 @@
+use crate::strike::{Hit, SimEvent, Strikeable};
 use crate::{DT, Input, TileMap, Tuning, secs_to_ticks};
 
 /// Caja de colisión en píxeles enteros.
@@ -31,6 +32,22 @@ pub struct Player {
     /// Ticks restantes de salto variable (mantener el botón sostiene la subida).
     pub var_jump: u32,
     var_jump_speed: f32,
+    /// Golpes disponibles (se recargan en el suelo o con ciertos objetos).
+    pub strikes: u8,
+    /// Ticks restantes de la ventana activa del golpe en curso.
+    pub strike_window: u32,
+    /// Ticks hasta poder iniciar otro golpe.
+    pub strike_cooldown: u32,
+    /// Dirección del último golpe (fijada al pulsar).
+    pub strike_dir: (i8, i8),
+    /// Ticks restantes de la animación de la porra (sólo visual).
+    pub swing: u32,
+    /// Ticks restantes sin gravedad ni control tras un impacto.
+    pub float: u32,
+    /// Ticks restantes de un golpe pulsado que aún no ha podido empezar.
+    pub strike_buffer: u32,
+    /// Dirección capturada al pulsar el golpe en buffer.
+    pub strike_aim: (i8, i8),
 }
 
 impl Player {
@@ -51,6 +68,14 @@ impl Player {
             jump_buffer: 0,
             var_jump: 0,
             var_jump_speed: 0.0,
+            strikes: 1,
+            strike_window: 0,
+            strike_cooldown: 0,
+            strike_dir: (1, 0),
+            swing: 0,
+            float: 0,
+            strike_buffer: 0,
+            strike_aim: (0, 0),
         }
     }
 
@@ -80,11 +105,30 @@ impl Player {
         )
     }
 
+    /// Durante el hit-stop el jugador no se actualiza, pero las pulsaciones
+    /// quedan en buffer para ejecutarse en cuanto termine.
+    pub(crate) fn buffer_during_hitstop(&mut self, t: &Tuning, input: &Input) {
+        if input.jump_pressed {
+            self.jump_buffer = secs_to_ticks(t.jump_buffer);
+        }
+        if input.strike_pressed {
+            self.strike_buffer = secs_to_ticks(t.strike_buffer).max(1);
+            self.strike_aim = (input.aim_x, input.aim_y);
+        }
+    }
+
     fn solid_at(&self, map: &TileMap, dx: i32, dy: i32) -> bool {
         map.solid_in_rect(self.pos.0 + dx, self.pos.1 + dy, Self::W, Self::H)
     }
 
-    pub(crate) fn update(&mut self, map: &TileMap, t: &Tuning, input: &Input) {
+    pub(crate) fn update(
+        &mut self,
+        map: &TileMap,
+        t: &Tuning,
+        input: &Input,
+        objects: &mut [Strikeable],
+        events: &mut Vec<SimEvent>,
+    ) -> Option<Hit> {
         self.prev = self.exact_pos();
 
         // --- Suelo, coyote time y buffer de salto -------------------------
@@ -99,10 +143,28 @@ impl Player {
         } else {
             self.jump_buffer = self.jump_buffer.saturating_sub(1);
         }
+        if self.on_ground && self.float == 0 && self.strike_window == 0 {
+            self.strikes = t.max_strikes as u8;
+        }
+
+        // --- Golpe con la porra -------------------------------------------
+        let hit = self.update_strike(
+            t,
+            input.strike_pressed,
+            (input.aim_x, input.aim_y),
+            objects,
+            events,
+        );
+        let floating = self.float > 0;
+        self.float = self.float.saturating_sub(1);
 
         // --- Horizontal ---------------------------------------------------
         if input.x != 0 {
             self.facing = input.x;
+        }
+        if floating {
+            // Tras el impacto, la trayectoria es exactamente la del golpe.
+            return self.finish_move(map, hit);
         }
         let mult = if self.on_ground { 1.0 } else { t.air_mult };
         let target = t.run_speed * input.x as f32;
@@ -151,6 +213,10 @@ impl Player {
             self.var_jump = secs_to_ticks(t.var_jump_time);
         }
 
+        self.finish_move(map, hit)
+    }
+
+    fn finish_move(&mut self, map: &TileMap, hit: Option<Hit>) -> Option<Hit> {
         // --- Movimiento con colisión --------------------------------------
         if self.move_x(map, self.vel.0 * DT) {
             self.vel.0 = 0.0;
@@ -162,6 +228,7 @@ impl Player {
             }
             self.vel.1 = 0.0;
         }
+        hit
     }
 
     /// Mueve en X; devuelve `true` si choca.

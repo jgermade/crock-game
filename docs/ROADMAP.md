@@ -27,7 +27,7 @@ En lugar del doble salto, el personaje **golpea con la porra contra algo para im
 - **Objetos golpeables concretos** (rocas, estalactitas, troncos, huesos colgantes, bichos, cuernos de mamut…), para que el lenguaje de niveles sea claro. No todo es golpeable.
 - **Recarga:** número limitado de golpes, restaurados al tocar suelo o al golpear ciertos objetos.
 - **Variantes a explorar:** rocas que se rompen en un solo uso, objetos con distinto impulso, enemigos que devuelven el golpe, fuego que quema la porra.
-- **Pendiente de decidir:** si tras el impacto el jugador puede añadir empuje con el stick (estilo Celeste) o el impulso es siempre exactamente opuesto al golpe.
+- **Pendiente de decidir:** si tras el impacto el jugador puede añadir empuje con el stick (estilo Celeste) o el impulso es siempre exactamente opuesto al golpe. *Prototipo: exactamente opuesto por defecto; `strike_steer` en `tuning.cfg` activa el empuje para comparar jugando.*
 
 ## 3. Principios de latencia y "game feel"
 
@@ -64,10 +64,10 @@ En lugar del doble salto, el personaje **golpea con la porra contra algo para im
 - [x] Soporte de mando (SDL3 gamepad) *(sin probar con mando físico)*
 
 ### Fase 2 — Mecánica del golpe (prototipo)
-- [ ] Un objeto golpeable e impulso en 8 direcciones
-- [ ] Recarga de golpes
-- [ ] Hit-stop, screen shake y partículas básicas
-- [ ] Sala de prueba con 3–4 tipos de objeto
+- [x] Un objeto golpeable e impulso en 8 direcciones
+- [x] Recarga de golpes
+- [x] Hit-stop, screen shake y partículas básicas
+- [x] Sala de prueba con 3–4 tipos de objeto *(roca, frágil, hueso, musgo)*
 - [ ] **Punto de decisión:** ¿el golpe encadenado resulta divertido?
 
 ### Fase 3 — Contenido

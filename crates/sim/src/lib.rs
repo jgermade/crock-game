@@ -8,10 +8,13 @@
 
 mod map;
 mod player;
+pub mod replay;
+mod strike;
 mod tuning;
 
 pub use map::{TILE, Tile, TileMap};
 pub use player::{Aabb, Player};
+pub use strike::{SimEvent, StrikeKind, Strikeable, unit};
 pub use tuning::Tuning;
 
 /// Frecuencia de simulación (ticks por segundo).
@@ -38,6 +41,11 @@ pub struct Input {
     pub y: i8,
     pub jump_held: bool,
     pub jump_pressed: bool,
+    pub strike_pressed: bool,
+    /// Dirección de apuntado del golpe, capturada en el instante de pulsar
+    /// (puede diferir de `x, y` si se soltó la dirección dentro del frame).
+    pub aim_x: i8,
+    pub aim_y: i8,
 }
 
 /// Estado completo del juego.
@@ -46,23 +54,46 @@ pub struct World {
     pub map: TileMap,
     pub player: Player,
     pub tuning: Tuning,
+    pub objects: Vec<Strikeable>,
     pub tick: u64,
+    /// Ticks restantes de hit-stop (la simulación del jugador se congela).
+    pub hitstop: u32,
+    /// Ticks restantes de temblor de pantalla y su dirección.
+    pub shake: u32,
+    pub shake_dir: (i8, i8),
+    /// Eventos pendientes de que la plataforma los drene.
+    pub events: Vec<SimEvent>,
 }
 
 impl World {
     pub fn new(map: TileMap, tuning: Tuning) -> Self {
-        let player = Player::spawn(map.spawn);
-        Self {
+        let mut w = Self {
+            player: Player::spawn(map.spawn),
             map,
-            player,
             tuning,
+            objects: Vec::new(),
             tick: 0,
-        }
+            hitstop: 0,
+            shake: 0,
+            shake_dir: (0, 0),
+            events: Vec::new(),
+        };
+        w.restart();
+        w
     }
 
-    /// Reinicio instantáneo: jugador al punto de aparición, sin transición.
+    /// Reinicio instantáneo: jugador y objetos a su estado inicial, sin transición.
     pub fn restart(&mut self) {
         self.player = Player::spawn(self.map.spawn);
+        self.objects = self
+            .map
+            .objects
+            .iter()
+            .map(|&(k, c)| Strikeable::new(k, c))
+            .collect();
+        self.hitstop = 0;
+        self.shake = 0;
+        self.events.push(SimEvent::Respawn);
     }
 
     /// Hash barato del estado relevante, para tests de determinismo.
@@ -80,6 +111,10 @@ impl World {
         mix(p.rem.1.to_bits() as u64);
         mix(p.vel.0.to_bits() as u64);
         mix(p.vel.1.to_bits() as u64);
+        mix(p.strikes as u64);
+        for o in &self.objects {
+            mix(o.cooldown as u64 | (o.broken as u64) << 32);
+        }
         h
     }
 }
@@ -87,7 +122,30 @@ impl World {
 /// Avanza la simulación exactamente un tick de [`DT`] segundos.
 pub fn step(world: &mut World, input: &Input) {
     world.tick += 1;
-    world.player.update(&world.map, &world.tuning, input);
+    let t = &world.tuning;
+
+    for o in &mut world.objects {
+        o.tick();
+    }
+    world.shake = world.shake.saturating_sub(1);
+
+    if world.hitstop > 0 {
+        // Congelado, pero sin perder entradas: un salto o golpe pulsado
+        // durante el hit-stop se ejecuta en cuanto termina.
+        world.hitstop -= 1;
+        world.player.buffer_during_hitstop(t, input);
+        return;
+    }
+
+    if let Some(hit) =
+        world
+            .player
+            .update(&world.map, t, input, &mut world.objects, &mut world.events)
+    {
+        world.hitstop = secs_to_ticks(t.hitstop);
+        world.shake = secs_to_ticks(t.shake_time);
+        world.shake_dir = hit.dir;
+    }
 
     // Caer fuera del mapa = reinicio instantáneo.
     if world.player.pos.1 > world.map.height_px() + 32 {
@@ -97,3 +155,5 @@ pub fn step(world: &mut World, input: &Input) {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_strike;

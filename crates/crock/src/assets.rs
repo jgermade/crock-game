@@ -5,7 +5,15 @@ use std::time::SystemTime;
 
 use crock_sim::{TileMap, Tuning};
 
-pub const FALLBACK_LEVEL: &str = include_str!("../../../assets/levels/test.txt");
+/// Salas disponibles: nombre de fichero (sin extensión) y copia embebida
+/// por si no se encuentra la carpeta de assets.
+pub const LEVELS: [(&str, &str); 2] = [
+    ("golpe", include_str!("../../../assets/levels/golpe.txt")),
+    (
+        "movimiento",
+        include_str!("../../../assets/levels/movimiento.txt"),
+    ),
+];
 
 /// Busca la carpeta `assets`: `$CROCK_ASSETS`, `./assets`, junto al
 /// ejecutable, o la del repositorio (útil con `cargo run`).
@@ -27,15 +35,16 @@ pub fn assets_dir() -> PathBuf {
         .unwrap_or_else(|| "assets".into())
 }
 
-pub fn load_level(dir: &Path) -> TileMap {
-    let path = dir.join("levels/test.txt");
-    let src = std::fs::read_to_string(&path).unwrap_or_else(|_| FALLBACK_LEVEL.to_string());
+pub fn load_level(dir: &Path, index: usize) -> TileMap {
+    let (name, embedded) = LEVELS[index % LEVELS.len()];
+    let path = dir.join(format!("levels/{name}.txt"));
+    let src = std::fs::read_to_string(&path).unwrap_or_else(|_| embedded.to_string());
     TileMap::parse(&src).unwrap_or_else(|e| {
         eprintln!(
-            "[crock] error en {}: {e}; uso el nivel embebido",
+            "[crock] error en {}: {e}; uso la copia embebida",
             path.display()
         );
-        TileMap::parse(FALLBACK_LEVEL).expect("nivel embebido válido")
+        TileMap::parse(embedded).expect("nivel embebido válido")
     })
 }
 

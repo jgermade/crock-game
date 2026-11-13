@@ -24,4 +24,6 @@ jobs:
         env:
           SDL_VIDEO_DRIVER: offscreen
           SDL_AUDIO_DRIVER: dummy
-        run: cargo run -p crock -- --vsync=off --fps=120 --frames=240 --autoplay
+        run: |
+          cargo run -p crock -- --vsync=off --fps=120 --frames=240 --autoplay
+          cargo run -p crock -- --vsync=off --fps=240 --frames=300 --replay=assets/replays/cruce-golpe.rep

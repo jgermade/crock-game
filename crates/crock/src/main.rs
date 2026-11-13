@@ -5,6 +5,7 @@
 //! simular.
 
 mod assets;
+mod fx;
 mod input;
 mod render;
 mod stats;
@@ -116,6 +117,12 @@ struct Options {
     screenshot: Option<String>,
     /// Entrada scriptada para pruebas: mantener derecha y saltar periódicamente.
     autoplay: bool,
+    /// Sala inicial (índice en `assets::LEVELS`).
+    level: usize,
+    /// Reproducir entradas grabadas (una por tick).
+    replay: Option<String>,
+    /// Grabar las entradas desde el último reinicio al salir.
+    record: Option<String>,
 }
 
 fn parse_args() -> Options {
@@ -126,6 +133,9 @@ fn parse_args() -> Options {
         frames: None,
         screenshot: None,
         autoplay: false,
+        level: 0,
+        replay: None,
+        record: None,
     };
     for a in std::env::args().skip(1) {
         let (k, v) = a.split_once('=').unwrap_or((a.as_str(), ""));
@@ -136,9 +146,19 @@ fn parse_args() -> Options {
             "--frames" => o.frames = v.parse().ok(),
             "--screenshot" => o.screenshot = Some(v.to_string()),
             "--autoplay" => o.autoplay = true,
+            "--replay" => o.replay = Some(v.to_string()),
+            "--record" => o.record = Some(v.to_string()),
+            "--level" => {
+                o.level = assets::LEVELS
+                    .iter()
+                    .position(|(n, _)| *n == v)
+                    .or_else(|| v.parse().ok())
+                    .unwrap_or(0)
+            }
             "-h" | "--help" => {
                 println!(
                     "crock [--vsync=on|adaptive|off] [--fps=N] [--fullscreen]\n\
+                     \x20     [--level=golpe|movimiento] [--replay=f] [--record=f]\n\
                      \x20     [--frames=N] [--screenshot=out.bmp] [--autoplay]"
                 );
                 std::process::exit(0);
@@ -231,7 +251,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let assets = assets::assets_dir();
     let mut tuning_watch = assets::TuningWatcher::new(&assets);
-    let mut world = World::new(assets::load_level(&assets), Default::default());
+    let mut level = opts.level;
+    let mut world = World::new(assets::load_level(&assets, level), Default::default());
     if let Some((t, warns)) = tuning_watch.poll(now_ns()) {
         world.tuning = t;
         warns
@@ -242,6 +263,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut input = InputState::new(gamepads);
     let mut events = sdl.event_pump()?;
     let mut stats = Stats::new();
+    let mut fx = fx::Fx::new();
+    let mut replay: std::collections::VecDeque<crock_sim::Input> = match &opts.replay {
+        Some(path) => crock_sim::replay::decode(&std::fs::read_to_string(path)?)?.into(),
+        None => Default::default(),
+    };
+    let mut recording: Vec<crock_sim::Input> = Vec::new();
 
     let mut show_overlay = true;
     let mut cap_idx = FPS_CAPS
@@ -291,6 +318,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         Scancode::Escape => break 'main,
                         Scancode::R => {
                             world.restart();
+                            recording.clear();
                             true
                         }
                         Scancode::F1 => {
@@ -310,10 +338,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             delay_idx = (delay_idx + 1) % FRAME_DELAYS_MS.len();
                             true
                         }
-                        Scancode::F5 => {
-                            world.map = assets::load_level(&assets);
+                        Scancode::F5 | Scancode::F6 => {
+                            if sc == Scancode::F6 {
+                                level = (level + 1) % assets::LEVELS.len();
+                            }
+                            world.map = assets::load_level(&assets, level);
                             world.restart();
-                            message = Some(("nivel recargado".into(), now_ns()));
+                            recording.clear();
+                            let name = assets::LEVELS[level].0;
+                            message = Some((format!("sala: {name}"), now_ns()));
                             true
                         }
                         Scancode::F11 => {
@@ -355,16 +388,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // --- Simulación a paso fijo --------------------------------------
         let now = now_ns();
+        let frame_dt = (now - last_ns).min(100_000_000) as f32 / 1e9;
         acc_ns += (now - last_ns).min(250_000_000);
         last_ns = now;
         stats.ticks_this_frame = 0;
         while acc_ns >= DT_NS {
             let mut tick_input = input.take_tick_input();
+            if let Some(r) = replay.pop_front() {
+                tick_input = r;
+            }
             if opts.autoplay {
                 let t = world.tick;
                 tick_input.x = if (t / 600).is_multiple_of(2) { 1 } else { -1 };
                 tick_input.jump_pressed = t.is_multiple_of(120);
                 tick_input.jump_held = t % 120 < 60;
+                // Golpe en diagonal hacia abajo cada medio segundo.
+                if t % 120 == 40 {
+                    tick_input.strike_pressed = true;
+                    tick_input.aim_x = tick_input.x;
+                    tick_input.aim_y = 1;
+                }
+            }
+            if opts.record.is_some() {
+                recording.push(tick_input);
             }
             step(&mut world, &tick_input);
             acc_ns -= DT_NS;
@@ -376,8 +422,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             alpha.max(acc_ns as f32 / DT_NS as f32)
         };
 
+        // Efectos visuales a partir de los eventos de la simulación.
+        for ev in world.events.drain(..) {
+            fx.handle(&ev);
+        }
+        fx.update(frame_dt);
+
         // --- Render -------------------------------------------------------
-        render::draw_world(&mut canvas, &world, alpha);
+        render::draw_world(&mut canvas, &world, alpha, &fx, show_overlay);
         if show_overlay {
             let (favg, fmax) = stats.frame_ms();
             let (wavg, wmax) = stats.work_ms();
@@ -401,8 +453,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ),
                 format!("ticks/frame {}  alpha {alpha:.2}", stats.ticks_this_frame),
                 match stats.latency_ms() {
-                    Some((l, a)) => format!("salto->present {l:5.2} ms (media {a:5.2})"),
-                    None => "salto->present: pulsa salto".into(),
+                    Some((l, a)) => format!("pulsacion->present {l:5.2} ms (media {a:5.2})"),
+                    None => "pulsacion->present: pulsa salto o golpe".into(),
                 },
                 format!(
                     "pos {:4},{:4} vel {:6.1},{:6.1} {} coyote {:2} buf {:2}",
@@ -414,6 +466,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     p.coyote,
                     p.jump_buffer
                 ),
+                format!(
+                    "golpes {}  ventana {:2}  float {:2}  hitstop {:2}  sala {}",
+                    p.strikes,
+                    p.strike_window,
+                    p.float,
+                    world.hitstop,
+                    assets::LEVELS[level].0
+                ),
             ];
             let pads = input.gamepad_names();
             lines.push(if pads.is_empty() {
@@ -421,7 +481,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 format!("mandos: {}", pads.join(", "))
             });
-            lines.push("R reiniciar  F1 overlay  F5 recargar nivel  Esc salir".into());
+            lines.push("R reiniciar  F1 overlay  F5 recargar  F6 sala  Esc salir".into());
             if let Some((m, t)) = &message
                 && frame_start - t < 3_000_000_000
             {
@@ -464,6 +524,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
             break;
         }
+    }
+    if let Some(path) = &opts.record {
+        std::fs::write(path, crock_sim::replay::encode(&recording))?;
+        println!("[crock] {} ticks grabados en {path}", recording.len());
     }
     Ok(())
 }

@@ -26,22 +26,33 @@ fn settle(w: &mut World) {
     assert!(w.player.on_ground, "el jugador debería estar en el suelo");
 }
 
+const NONE: Input = Input {
+    x: 0,
+    y: 0,
+    jump_held: false,
+    jump_pressed: false,
+    strike_pressed: false,
+    aim_x: 0,
+    aim_y: 0,
+};
 const JUMP: Input = Input {
     x: 0,
     y: 0,
     jump_held: true,
     jump_pressed: true,
+    ..NONE
 };
 const HOLD: Input = Input {
     x: 0,
     y: 0,
     jump_held: true,
     jump_pressed: false,
+    ..NONE
 };
 
 #[test]
 fn shipped_test_level_parses() {
-    let m = TileMap::parse(include_str!("../../../assets/levels/test.txt")).unwrap();
+    let m = TileMap::parse(include_str!("../../../assets/levels/movimiento.txt")).unwrap();
     assert_eq!((m.w, m.h), (40, 23));
 }
 
@@ -175,6 +186,7 @@ fn coyote_time_allows_late_jump() {
                     y: 0,
                     jump_held: press,
                     jump_pressed: press,
+                    ..NONE
                 },
             );
             if press {
@@ -212,6 +224,7 @@ fn jump_buffer_triggers_on_landing() {
                     y: 0,
                     jump_held: press,
                     jump_pressed: press,
+                    ..NONE
                 },
             );
         }
@@ -287,10 +300,11 @@ fn deterministic() {
                 y: 0,
                 jump_held: jump,
                 jump_pressed: jump && i % 23 == 0,
+                ..NONE
             }
         })
         .collect();
-    let level = include_str!("../../../assets/levels/test.txt");
+    let level = include_str!("../../../assets/levels/movimiento.txt");
     let mut a = world(level);
     let mut b = world(level);
     for inp in &script {

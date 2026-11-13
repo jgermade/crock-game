@@ -30,6 +30,37 @@ pub struct Tuning {
     pub coyote_time: f32,
     /// Input buffer: margen para un salto pulsado antes de tocar suelo (s).
     pub jump_buffer: f32,
+
+    /// Velocidad del impulso del golpe (px/s).
+    pub strike_speed: f32,
+    /// Empuje adicional del stick en el impacto (px/s). 0 = impulso
+    /// exactamente opuesto al golpe.
+    pub strike_steer: f32,
+    /// Tiempo sin gravedad ni control tras el impacto (s).
+    pub strike_float: f32,
+    /// Ventana activa del golpe: si un objeto entra en la caja durante este
+    /// tiempo tras pulsar, el golpe conecta (s).
+    pub strike_window: f32,
+    /// Tiempo tras un golpe fallido antes de poder golpear otra vez (s).
+    pub strike_cooldown: f32,
+    /// Buffer de golpe: una pulsación que aún no puede empezar espera esto (s).
+    pub strike_buffer: f32,
+    /// Distancia del centro del jugador al centro de la caja de golpe (px).
+    pub strike_reach: f32,
+    /// Lado de la caja de golpe (px).
+    pub strike_size: f32,
+    /// Golpes disponibles tras recargar.
+    pub max_strikes: f32,
+    /// Tiempo antes de poder golpear de nuevo el mismo objeto (s).
+    pub object_cooldown: f32,
+    /// Tiempo hasta que una roca frágil reaparece (s).
+    pub fragile_respawn: f32,
+    /// Multiplicadores de impulso por tipo de objeto.
+    pub bone_mult: f32,
+    pub moss_mult: f32,
+    /// Hit-stop y temblor de pantalla en el impacto (s).
+    pub hitstop: f32,
+    pub shake_time: f32,
 }
 
 impl Default for Tuning {
@@ -48,6 +79,21 @@ impl Default for Tuning {
             half_grav_threshold: 40.0,
             coyote_time: 0.1,
             jump_buffer: 0.09,
+            strike_speed: 210.0,
+            strike_steer: 0.0,
+            strike_float: 0.06,
+            strike_window: 0.07,
+            strike_cooldown: 0.15,
+            strike_buffer: 0.1,
+            strike_reach: 9.0,
+            strike_size: 16.0,
+            max_strikes: 1.0,
+            object_cooldown: 0.35,
+            fragile_respawn: 2.5,
+            bone_mult: 1.35,
+            moss_mult: 0.7,
+            hitstop: 0.05,
+            shake_time: 0.12,
         }
     }
 }
@@ -68,6 +114,21 @@ impl Tuning {
             "half_grav_threshold" => &mut self.half_grav_threshold,
             "coyote_time" => &mut self.coyote_time,
             "jump_buffer" => &mut self.jump_buffer,
+            "strike_speed" => &mut self.strike_speed,
+            "strike_steer" => &mut self.strike_steer,
+            "strike_float" => &mut self.strike_float,
+            "strike_window" => &mut self.strike_window,
+            "strike_cooldown" => &mut self.strike_cooldown,
+            "strike_buffer" => &mut self.strike_buffer,
+            "strike_reach" => &mut self.strike_reach,
+            "strike_size" => &mut self.strike_size,
+            "max_strikes" => &mut self.max_strikes,
+            "object_cooldown" => &mut self.object_cooldown,
+            "fragile_respawn" => &mut self.fragile_respawn,
+            "bone_mult" => &mut self.bone_mult,
+            "moss_mult" => &mut self.moss_mult,
+            "hitstop" => &mut self.hitstop,
+            "shake_time" => &mut self.shake_time,
             _ => return None,
         })
     }
