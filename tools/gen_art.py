@@ -38,6 +38,25 @@ PALETTE = {
     "3": (98, 86, 86),
     "4": (128, 112, 104),
     "5": (160, 142, 124),
+    # terreno (paleta de la escena de referencia)
+    "6": (22, 19, 30),  # grieta
+    "7": (42, 41, 59),  # piedra fría
+    "8": (53, 59, 81),  # piedra fría, luz
+    "9": (74, 62, 69),  # piedra cálida, sombra
+    "!": (95, 81, 81),  # piedra cálida
+    "@": (108, 93, 93),  # piedra cálida, luz
+    "$": (121, 106, 102),  # piedra cálida, brillo
+    "%": (58, 94, 60),  # hierba sombra
+    "&": (78, 118, 60),  # hierba
+    "*": (98, 138, 67),  # hierba luz
+    "+": (131, 185, 68),  # hierba brillo
+    "=": (73, 51, 37),  # raíz
+    "?": (113, 85, 60),  # raíz luz
+    "<": (53, 66, 41),  # musgo sombra
+    ">": (82, 92, 52),  # musgo
+    "^": (183, 177, 157),  # estalagmita luz
+    "~": (150, 140, 129),  # estalagmita
+    ":": (110, 100, 94),  # estalagmita sombra
     # musgo
     "g": (58, 104, 50),
     "G": (96, 150, 64),
@@ -146,66 +165,110 @@ def from_rows(rows, w, h):
 # --- Piedra: celdas de Voronoi con luz arriba-izquierda ----------------------
 
 
-def stone(seed, dark=False):
+def cobbles(seed, ramp, n=6, crack="6"):
+    """Empedrado: celdas de Voronoi (con vuelta, para que case al repetirse)
+    separadas por grietas, cada piedra con luz arriba-izquierda."""
     rnd = random.Random(seed)
-    pts = [(rnd.uniform(0, T), rnd.uniform(0, T)) for _ in range(5)]
+    pts = [(rnd.uniform(0, T), rnd.uniform(0, T), rnd.randint(0, 1)) for _ in range(n)]
     c = Canvas(T, T)
-
-    def nearest(x, y):
-        best = None
-        for i, (px, py) in enumerate(pts):
-            for ox in (-T, 0, T):
-                for oy in (-T, 0, T):
-                    d = (x - px - ox) ** 2 + (y - py - oy) ** 2
-                    if best is None or d < best[0]:
-                        best = (d, i)
-        return best[1]
-
-    cell = [[nearest(x + 0.5, y + 0.5) for x in range(T)] for y in range(T)]
-    ramp = "0112" if dark else "1234"
     for y in range(T):
         for x in range(T):
-            i = cell[y][x]
-            edge_tl = cell[(y - 1) % T][x] != i or cell[y][(x - 1) % T] != i
-            edge_br = cell[(y + 1) % T][x] != i or cell[y][(x + 1) % T] != i
-            base = 2 if (i % 3) else 1
-            if edge_br:
-                v = 0
-            elif edge_tl:
-                v = 3
-            else:
-                v = base
-                if rnd.random() < 0.06:
-                    v = min(3, v + 1)
-            c.set(x, y, ramp[v])
+            ds = []
+            for i, (px_, py_, _) in enumerate(pts):
+                for ox in (-T, 0, T):
+                    for oy in (-T, 0, T):
+                        ds.append((math.hypot(x + 0.5 - px_ - ox, y + 0.5 - py_ - oy), i, px_ + ox, py_ + oy))
+            ds.sort()
+            (d1, i, cx, cy), (d2, _, _, _) = ds[0], ds[1]
+            if d2 - d1 < 1.1:
+                c.set(x, y, crack)
+                continue
+            # Luz arriba-izquierda dentro de la piedra.
+            light = (-(x + 0.5 - cx) - (y + 0.5 - cy)) / (d2 + d1 + 1e-3) * 1.8
+            edge = d2 - d1 < 2.4
+            v = 1 + pts[i][2] * 0.5 + light + (BAYER[y % 4][x % 4] / 16 - 0.5) * 0.4
+            if edge and light < 0:
+                v -= 1
+            c.set(x, y, ramp[max(0, min(len(ramp) - 1, round(v)))])
+    return c
+
+
+def stone(seed, dark=False):
+    if dark:
+        return cobbles(seed, "778", n=4)
+    return cobbles(seed, "9!@$", n=5)
+
+
+def stone_moss(seed):
+    """Piedra con manchas de musgo (para paredes y laterales)."""
+    c = stone(seed)
+    rnd = random.Random(seed + 7)
+    for _ in range(3):
+        cx, cy, r = rnd.uniform(2, T - 2), rnd.uniform(2, T - 2), rnd.uniform(2.5, 5)
+        for y in range(T):
+            for x in range(T):
+                d = math.hypot(x + 0.5 - cx, (y + 0.5 - cy) * 1.4)
+                if d < r and c.get(x, y) != "6" and rnd.random() < 0.9 - d / r * 0.4:
+                    c.set(x, y, ">" if (x - cx) + (y - cy) < 0 else "<")
     return c
 
 
 def stone_top(seed):
+    """Borde de suelo: hierba gruesa con goterones de musgo y raíces."""
     c = stone(seed)
     rnd = random.Random(seed + 99)
+    depth = []
+    x = 0
+    while x < T:
+        d = 7 + (1 if rnd.random() < 0.4 else 0)
+        if rnd.random() < 0.3:
+            # Goterón de musgo de 2-3 columnas.
+            extra = rnd.randint(3, 6)
+            for k in range(rnd.randint(2, 3)):
+                depth.append(d + extra - (1 if k != 1 else 0))
+                x += 1
+            continue
+        depth.append(d)
+        x += 1
+    depth = depth[:T]
     for x in range(T):
-        depth = int((3 + (1 if rnd.random() < 0.35 else 0) + (1 if rnd.random() < 0.15 else 0)) * K)
-        for y in range(depth):
-            c.set(x, y, "Y" if y == 0 and rnd.random() < 0.5 else "G" if y < 2 else "g")
-        c.set(x, depth, "1")
+        for y in range(depth[x]):
+            if y == 0:
+                ch = "+" if rnd.random() < 0.7 else "*"
+            elif y < 3:
+                ch = "*" if rnd.random() < 0.75 else "+"
+            elif y < 6:
+                ch = "&"
+            else:
+                ch = "%" if y < depth[x] - 1 or depth[x] > 8 else "&"
+            c.set(x, y, ch)
+        c.set(x, depth[x], "6")
+    # Raíces que se meten entre las piedras.
+    for _ in range(2):
+        x, y = rnd.uniform(3, T - 3), 7.0
+        for k in range(rnd.randint(6, 11)):
+            c.set(int(x), int(y), "?" if k % 3 == 0 else "=")
+            x += rnd.choice((-1, 0, 0, 1))
+            y += 1
     return c
 
 
 def fangs():
-    """Pinchos hacia arriba: dos colmillos de hueso en la mitad inferior."""
+    """Pinchos hacia arriba: estalagmitas de piedra pálida."""
     c = Canvas(T, T)
-    for cx in (4, 12):
+    for cx, hgt, wd in ((4.5, 15, 3.6), (12, 18, 4.2), (19.5, 14, 3.4)):
         for y in range(T):
-            if u(y) < 5:
+            t = (T - 1 - y) / hgt  # 0 en la base, 1 en la punta
+            if t > 1:
                 continue
-            half = (u(y) - 5) * 4 / 10.5
+            half = wd * (1 - t) ** 0.9
             for x in range(T):
-                dx = u(x) - cx
-                if abs(dx) <= half + 0.25:
-                    c.set(x, y, "b" if dx < -0.5 else "B" if dx < 1.2 else "n")
+                dx = x + 0.5 - cx
+                if abs(dx) <= half:
+                    rel = dx / max(half, 0.5)
+                    c.set(x, y, "^" if rel < -0.3 else "~" if rel < 0.35 else ":")
     for x in range(T):
-        c.set(x, T - 1, "n")
+        c.set(x, T - 1, ":")
     c.outline()
     return c
 
@@ -223,25 +286,44 @@ def rotate(c, times):
 def stalactite():
     c = Canvas(T, T)
     for y in range(T):
-        if u(y) >= 11:
+        t = y / 16
+        if t > 1:
             continue
-        half = 5.5 * (1 - u(y) / 11)
+        half = 6 * (1 - t) ** 0.9
         for x in range(T):
-            dx = u(x) - 8
+            dx = x + 0.5 - 12
             if abs(dx) <= half:
-                c.set(x, y, "4" if dx < -1.5 else "3" if dx < 1 else "2")
+                c.set(x, y, "@" if dx < -half * 0.3 else "!" if dx < half * 0.4 else "9")
     c.outline()
+    return c
+
+
+def tuft(seed):
+    """Mata de hierba alta sobre el suelo."""
+    c = Canvas(T, T)
+    rnd = random.Random(seed)
+    for _ in range(rnd.randint(11, 15)):
+        x = rnd.uniform(5, T - 5)
+        h = rnd.uniform(6, 16)
+        lean = rnd.uniform(-0.5, 0.5)
+        shade = rnd.choice("*&+&%")
+        for k in range(int(h)):
+            xx = int(x + lean * k * (k / h))
+            ch = "+" if k > h - 3 and shade in "*+" else shade
+            c.set(xx, T - 1 - k, ch)
+            if k < h * 0.5:
+                c.set(xx + 1, T - 1 - k, "%" if shade != "%" else "&")
     return c
 
 
 def pebbles():
     c = Canvas(T, T)
-    for cx, cy, r in ((4, 14, 2.2), (10, 14.5, 1.6), (13, 13.8, 1.2)):
+    for cx, cy, r in ((6, T - 2.5, 3.0), (14, T - 2, 2.2), (19, T - 2.8, 1.8)):
         for y in range(T):
             for x in range(T):
-                d = math.hypot(u(x) - cx, u(y) - cy)
+                d = math.hypot(x + 0.5 - cx, y + 0.5 - cy)
                 if d <= r:
-                    c.set(x, y, "4" if (u(x) - cx) + (u(y) - cy) < -0.5 else "3")
+                    c.set(x, y, "@" if (x + 0.5 - cx) + (y + 0.5 - cy) < -0.5 else "9")
     c.outline()
     return c
 
@@ -445,7 +527,13 @@ def cueva():
         ("spike_left", rotate(up, 3)),
         ("spike_right", rotate(up, 1)),
         ("deco", stalactite()),
+        ("deco", tuft(5)),
         ("deco", pebbles()),
+        ("solid", stone_moss(4)),
+        ("solid", stone(11)),
+        ("solid", stone(21)),
+        ("solid", stone(22, dark=True)),
+        ("solid", stone_top(14)),
     ]
 
 

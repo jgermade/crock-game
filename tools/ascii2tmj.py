@@ -18,8 +18,12 @@ CUEVA_FIRST = 1
 OBJ_FIRST = 101
 # Índices en los tilesets (ver tools/gen_art.py).
 STONE, STONE_TOP, STONE_DARK = 0, 1, 2
+# Variantes para que no se note la repetición (elegidas por hash de la celda).
+STONE_VARIANTS = (0, 11, 12, 0, 11, 12, 10)  # 10: piedra con musgo
+TOP_VARIANTS = (1, 14)
+DARK_VARIANTS = (2, 13)
 SPIKES = {"^": 3, "v": 4, "<": 5, ">": 6}
-STALACTITE, PEBBLES = 7, 8
+STALACTITE, TUFT, PEBBLES = 7, 8, 9
 OBJECTS = {"P": 0, "o": 1, "x": 2, "b": 3, "m": 4, "e": 5, "w": 6, "f": 7, "E": 8}
 
 
@@ -57,7 +61,8 @@ def convert(rows, name):
                     for dy in (-1, 0, 1)
                     for dx in (-1, 0, 1)
                 )
-                t = STONE_TOP if open_above else STONE_DARK if buried else STONE
+                pick = lambda opts: opts[hashed(x, y) % len(opts)]
+                t = pick(TOP_VARIANTS) if open_above else pick(DARK_VARIANTS) if buried else pick(STONE_VARIANTS)
                 tiles[i] = CUEVA_FIRST + t
             elif c in SPIKES:
                 tiles[i] = CUEVA_FIRST + SPIKES[c]
@@ -69,8 +74,8 @@ def convert(rows, name):
                 # Decoración en huecos vacíos.
                 if c == "." and y > 0 and solid(x, y - 1) and y + 1 < h and rows[y + 1][x] == "." and hashed(x, y) < 22:
                     deco[i] = CUEVA_FIRST + STALACTITE
-                elif c == "." and solid(x, y + 1) and y + 1 < h and hashed(x, y) < 18:
-                    deco[i] = CUEVA_FIRST + PEBBLES
+                elif c == "." and solid(x, y + 1) and y + 1 < h and hashed(x, y) < 26:
+                    deco[i] = CUEVA_FIRST + (PEBBLES if hashed(x, y) < 7 else TUFT)
 
     objs = []
     for n, (c, x, y) in enumerate(objects, start=1):

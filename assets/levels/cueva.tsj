@@ -5,12 +5,12 @@
  "name": "cueva",
  "tilewidth": 24,
  "tileheight": 24,
- "tilecount": 9,
- "columns": 9,
+ "tilecount": 15,
+ "columns": 15,
  "margin": 0,
  "spacing": 0,
  "image": "../gfx/cueva.png",
- "imagewidth": 216,
+ "imagewidth": 360,
  "imageheight": 24,
  "tiles": [
   {
@@ -100,6 +100,66 @@
      "name": "kind",
      "type": "string",
      "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "solid"
     }
    ]
   }
