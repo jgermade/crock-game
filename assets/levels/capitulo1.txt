@@ -1,0 +1,6 @@
+# Capítulo 1: La cueva. Una sala por línea, en orden (ficheros .tmj de esta carpeta).
+c1-01-entrada.tmj
+c1-02-primera-roca.tmj
+c1-03-el-foso.tmj
+c1-04-bichos.tmj
+c1-05-la-chimenea.tmj

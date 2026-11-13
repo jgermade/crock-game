@@ -1,0 +1,8 @@
+[package]
+name = "crock"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+crock-sim = { path = "../sim" }
+sdl3 = { version = "0.22", features = ["build-from-source-static"] }

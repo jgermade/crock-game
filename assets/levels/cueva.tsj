@@ -1,0 +1,367 @@
+{
+ "type": "tileset",
+ "version": "1.10",
+ "tiledversion": "1.10.2",
+ "name": "cueva",
+ "tilewidth": 24,
+ "tileheight": 24,
+ "tilecount": 35,
+ "columns": 35,
+ "margin": 0,
+ "spacing": 0,
+ "image": "../gfx/cueva.png",
+ "imagewidth": 840,
+ "imageheight": 24,
+ "tiles": [
+  {
+   "id": 0,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 1,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "spike_up"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "spike_down"
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "spike_left"
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "spike_right"
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 18,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 19,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 20,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 21,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 22,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 23,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 24,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 25,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 26,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 27,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 28,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 29,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 30,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 31,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 32,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 33,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 34,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  }
+ ]
+}
