@@ -13,11 +13,13 @@ use crate::gfx::{ART, Gfx};
 use crate::stats::{HISTORY, Stats};
 
 /// Tamaño de la ventana de juego en unidades (40×23 tiles).
-pub const VIEW_W: f32 = 320.0;
-pub const VIEW_H: f32 = 184.0;
+/// Lo que se ve de la sala (32×18 tiles, 16:9). Las salas más grandes se
+/// recorren con la cámara.
+pub const VIEW_W: f32 = 256.0;
+pub const VIEW_H: f32 = 144.0;
 
-/// Transformación de unidades de juego a píxeles de salida: escala entera
-/// en píxeles de arte, centrado con bandas negras y desplazamiento de cámara.
+/// Transformación de unidades de juego a píxeles (de la textura intermedia o
+/// de la ventana): escala, desplazamiento y cámara.
 #[derive(Clone, Copy)]
 pub struct View {
     pub scale: f32,
@@ -28,23 +30,6 @@ pub struct View {
 }
 
 impl View {
-    pub fn fit(out_w: i32, out_h: i32) -> Self {
-        let fit = (out_w as f32 / (VIEW_W * ART)).min(out_h as f32 / (VIEW_H * ART));
-        // Cada píxel de arte ocupa un número entero de píxeles de salida.
-        let scale = if fit >= 1.0 {
-            fit.floor() * ART
-        } else {
-            fit * ART
-        };
-        Self {
-            scale,
-            ox: ((out_w as f32 - VIEW_W * scale) / 2.0).floor(),
-            oy: ((out_h as f32 - VIEW_H * scale) / 2.0).floor(),
-            cam_x: 0.0,
-            cam_y: 0.0,
-        }
-    }
-
     pub fn rect(&self, x: f32, y: f32, w: f32, h: f32) -> FRect {
         // Redondeo a píxel de salida: el movimiento interpolado se ve suave
         // a cualquier escala sin emborronar los bordes.
@@ -53,10 +38,6 @@ impl View {
         let x1 = (self.ox + (x + w - self.cam_x) * self.scale).round();
         let y1 = (self.oy + (y + h - self.cam_y) * self.scale).round();
         FRect::new(x0, y0, x1 - x0, y1 - y0)
-    }
-
-    pub fn screen(&self) -> FRect {
-        FRect::new(self.ox, self.oy, VIEW_W * self.scale, VIEW_H * self.scale)
     }
 }
 
@@ -84,6 +65,18 @@ fn camera(world: &World, alpha: f32) -> (f32, f32) {
     (snap(axis(cx, mw, VIEW_W)), snap(axis(cy, mh, VIEW_H)))
 }
 
+/// Cómo se escala la imagen de juego a la ventana.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Scaling {
+    /// Llenar la ventana (escala no entera, con filtro de pixel art nítido).
+    Fill,
+    /// Sólo múltiplos enteros (píxeles perfectos, con bandas).
+    Integer,
+}
+
+/// Dibuja el mundo en la textura intermedia (resolución nativa del arte) y
+/// la escala a la ventana. Devuelve la vista en coordenadas de ventana, para
+/// el HUD.
 pub fn draw_world(
     canvas: &mut WindowCanvas,
     world: &World,
@@ -91,10 +84,16 @@ pub fn draw_world(
     fx: &Fx,
     gfx: &Gfx,
     debug: bool,
+    scaling: Scaling,
 ) -> View {
-    let (ow, oh) = output_size(canvas);
-    let mut view = View::fit(ow, oh);
-    (view.cam_x, view.cam_y) = camera(world, alpha);
+    let (cam_x, cam_y) = camera(world, alpha);
+    let mut view = View {
+        scale: ART,
+        ox: 0.0,
+        oy: 0.0,
+        cam_x,
+        cam_y,
+    };
 
     // Temblor: sobre todo en la dirección del golpe, decayendo.
     if world.shake > 0 {
@@ -107,28 +106,40 @@ pub fn draw_world(
         view.oy += ((dy * n - dx * 0.3 * n) * amp).round();
     }
 
-    canvas.set_draw_color(Color::RGB(0, 0, 0));
-    canvas.clear();
-    let clip = view.screen();
-    let r = sys::rect::SDL_Rect {
-        x: clip.x as i32,
-        y: clip.y as i32,
-        w: clip.w as i32,
-        h: clip.h as i32,
-    };
-    unsafe { sys::render::SDL_SetRenderClipRect(canvas.raw(), &r) };
-
+    unsafe { sys::render::SDL_SetRenderTarget(canvas.raw(), gfx.target) };
     canvas.set_draw_color(Color::RGB(24, 20, 30));
-    let _ = canvas.fill_rect(clip);
-
+    canvas.clear();
     draw_tiles(canvas, world, &view, gfx);
     draw_zones(canvas, world, &view, gfx);
     draw_objects(canvas, world, &view, gfx);
     draw_player(canvas, world, alpha, &view, gfx, debug);
     fx.draw(canvas, &view);
+    unsafe { sys::render::SDL_SetRenderTarget(canvas.raw(), std::ptr::null_mut()) };
 
-    unsafe { sys::render::SDL_SetRenderClipRect(canvas.raw(), std::ptr::null()) };
-    view
+    // Escalar a la ventana.
+    let (ow, oh) = output_size(canvas);
+    let (tw, th) = (VIEW_W * ART, VIEW_H * ART);
+    let mut s = (ow as f32 / tw).min(oh as f32 / th);
+    if scaling == Scaling::Integer && s >= 1.0 {
+        s = s.floor();
+    }
+    let (dw, dh) = ((tw * s).round(), (th * s).round());
+    let dst = sys::rect::SDL_FRect {
+        x: ((ow as f32 - dw) / 2.0).floor(),
+        y: ((oh as f32 - dh) / 2.0).floor(),
+        w: dw,
+        h: dh,
+    };
+    canvas.set_draw_color(Color::RGB(0, 0, 0));
+    canvas.clear();
+    unsafe { sys::render::SDL_RenderTexture(canvas.raw(), gfx.target, std::ptr::null(), &dst) };
+    View {
+        scale: s * ART,
+        ox: dst.x,
+        oy: dst.y,
+        cam_x,
+        cam_y,
+    }
 }
 
 fn visible_range(view: &View, w: i32, h: i32) -> (i32, i32, i32, i32) {

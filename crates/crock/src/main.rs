@@ -239,7 +239,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let gamepads = sdl.gamepad()?;
 
     let window = video
-        .window("cROCK", 1280, 736)
+        .window("cROCK", 1280, 720)
         .resizable()
         .high_pixel_density()
         .build()?;
@@ -295,6 +295,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut recording: Vec<crock_sim::Input> = Vec::new();
 
     let mut show_overlay = opts.overlay;
+    let scaling = render::Scaling::Fill;
     let mut cap_idx = FPS_CAPS
         .iter()
         .position(|&c| c == opts.fps_cap)
@@ -485,7 +486,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         fx.update(frame_dt);
 
         // --- Render -------------------------------------------------------
-        let view = render::draw_world(&mut canvas, &world, alpha, &fx, &gfx, show_overlay);
+        let view = render::draw_world(&mut canvas, &world, alpha, &fx, &gfx, show_overlay, scaling);
         let hud = [
             format!(
                 "{} {}/{}",

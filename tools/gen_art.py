@@ -366,184 +366,11 @@ def exit_arrow():
     return c
 
 
-# --- Crock -----------------------------------------------------------------
-#
-# Cavernícola delgado con una melena larga que le cae como un manto y le
-# cubre el cuerpo; asoman la cara, los brazos y los pies. Mira a la derecha.
-# Celdas de 32x32 con los pies en la fila 31; la caja de colisión (16x22 px
-# de arte) va centrada abajo (columnas 8..23, filas 10..31).
-#
-# La melena se sombrea como un volumen (luz arriba-izquierda) con mechones
-# agrupados; los contornos son de color (marrón oscuro el pelo, tostado la
-# piel), no negros.
+# --- Crock: dibujado a mano en tools/crock_art.py -----------------------------
 
-# Rampa del pelo, de sombra a brillo, y contornos.
-HAIR = "HMLlA"
-HAIR_OUT = "O"
-SKIN_OUT = "q"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import crock_art  # noqa: E402
 
-
-def _hair_mask(pose):
-    """Silueta de la melena: dict (x, y) -> True, y el borde inferior."""
-    cx, cy, r = 16.0, 10.5, 7.2  # cabeza
-    sway = {"idle": 0.0, "run1": -1.5, "run2": -2.5, "jump": 0.5, "fall": 0.0}[pose]
-    bottom = {"idle": 27, "run1": 26, "run2": 26, "jump": 28, "fall": 24}[pose]
-    flare = {"idle": 0.04, "run1": 0.1, "run2": 0.14, "jump": 0.0, "fall": 0.28}[pose]
-    m = set()
-    for y in range(0, 32):
-        if y < cy:
-            d = r * r - (y + 0.5 - cy) ** 2
-            if d <= 0:
-                continue
-            half = math.sqrt(d)
-            l, rr = cx - half, cx + half
-        else:
-            t = y - cy
-            # cae hacia atrás (sway) y se abre un poco hacia abajo
-            l = cx - r - t * flare + sway * (t / 16.0)
-            rr = cx + r - 0.6 - (t * 0.08 if pose != "fall" else -t * 0.15)
-        for x in range(32):
-            if l <= x + 0.5 <= rr:
-                m.add((x, y))
-    # Puntas en pico: mechones de 3 columnas con largos distintos.
-    rnd = random.Random(5)
-    cut = {}
-    xs = sorted({x for x, _ in m})
-    for k, x in enumerate(xs):
-        group = k // 3
-        rnd.seed(group * 7 + 1)
-        base = bottom - rnd.choice((0, 1, 2, 3))
-        if pose.startswith("run") and x < 14:
-            base -= 1  # las puntas de atrás se levantan al correr
-        cut[x] = base - (0 if k % 3 == 1 else 1)  # punta en el centro del mechón
-    m = {(x, y) for x, y in m if y <= cut[x]}
-    return m
-
-
-def crock(pose):
-    c = Canvas(32, 32)
-    hair = _hair_mask(pose)
-    lx, ly = -0.6, -0.8
-    for x, y in hair:
-        # Normal aproximada: esfera arriba, cilindro abajo.
-        if y < 11:
-            nx, ny = (x + 0.5 - 16) / 7.6, (y + 0.5 - 10.5) / 7.6
-        else:
-            nx, ny = (x + 0.5 - 15.5) / 8.0, 0.25
-        nz = max(0.0, 1 - nx * nx - ny * ny) ** 0.5
-        light = nx * lx + ny * ly + nz * 0.55
-        # Mechones: bandas suaves y onduladas, agrupadas de 3 en 3 columnas.
-        strand = math.sin((x * 1.9) + math.sin(y * 0.35) * 1.4)
-        v = 1.05 + light * 1.7 + strand * 0.6 + (BAYER[y % 4][x % 4] / 16 - 0.5) * 0.15
-        v -= max(0, y - 19) * 0.09  # oclusión: más oscuro hacia las puntas
-        # Brillo del pelo: un arco en la coronilla.
-        if 3 <= y <= 7 and abs(math.hypot(x + 0.5 - 17, y + 0.5 - 11) - 6.2) < 0.7 and x < 19:
-            v += 1.2
-        c.set(x, y, HAIR[max(0, min(len(HAIR) - 1, int(v)))])
-
-    # Cara: hueco a la derecha, bajo el flequillo.
-    face = {
-        (x, y)
-        for y in range(9, 16)
-        for x in range(18, 24)
-        if not (y == 15 and x < 20) and not (y >= 14 and x > 22)
-    }
-    for x, y in face:
-        c.set(x, y, "s")
-    for x, y in ((18, 9), (18, 10), (18, 14), (19, 15)):
-        c.set(x, y, "S")  # sombra bajo el pelo
-    for x in range(20, 23):
-        c.set(x, 9, "S")
-    c.set(23, 10, "S")
-    # Flequillo: mechones que caen sobre la frente.
-    for x, y in ((17, 8), (18, 8), (19, 8), (20, 8), (21, 8), (22, 8), (23, 8), (18, 9), (19, 9), (21, 9), (23, 9), (24, 9)):
-        c.set(x, y, "M" if (x + y) % 3 else "L")
-    c.set(22, 9, "H")
-    # Ojo: blanco + pupila, con la ceja (el flequillo) encima.
-    c.set(20, 11, "e")
-    c.set(21, 11, "k")
-    c.set(21, 10, "S")
-    # Nariz grande que sobresale.
-    for x, y in ((23, 11), (24, 11), (23, 12), (24, 12), (25, 12), (24, 13)):
-        c.set(x, y, "s")
-    c.set(24, 11, "a")
-    c.set(25, 13, "S")
-    c.set(23, 13, "S")
-    # Boca.
-    c.set(21, 14, "q")
-    c.set(22, 14, "q")
-    # Barba que se funde con la melena bajo la barbilla.
-    for x, y in ((18, 15), (19, 15), (20, 15), (21, 15), (22, 15), (19, 16), (20, 16), (21, 16), (20, 17)):
-        c.set(x, y, "M" if (x * y) % 4 else "H")
-
-    # Brazo delantero y puño (donde se agarra la porra).
-    arm = {
-        "idle": [(21, 18), (22, 18), (22, 19), (23, 19), (23, 20), (24, 20)],
-        "run1": [(21, 17), (22, 17), (23, 17), (24, 16), (25, 16)],
-        "run2": [(21, 19), (22, 19), (22, 20), (23, 21), (23, 22)],
-        "jump": [(21, 19), (22, 19), (23, 18), (24, 17), (25, 16)],
-        "fall": [(21, 18), (22, 18), (23, 17), (24, 17), (25, 16), (26, 16)],
-    }[pose]
-    for x, y in arm:
-        c.set(x, y, "s")
-        c.set(x, y + 1, "S")
-    hx, hy = arm[-1]
-    for dx, dy in ((0, 0), (1, 0), (0, 1), (1, 1)):
-        c.set(hx + dx, hy + dy, "s")
-    c.set(hx, hy, "a")
-    c.set(hx + 1, hy + 1, "S")
-    if pose == "fall":
-        # Brazo de atrás asomando arriba (manos arriba al caer).
-        for x, y in ((9, 13), (8, 12), (7, 11), (6, 10)):
-            c.set(x, y, "s")
-            c.set(x, y + 1, "S")
-        c.set(5, 9, "s")
-        c.set(6, 9, "a")
-
-    # Piernas cortas y pies descalzos con dedos.
-    def foot(x, y, toes_right=True):
-        # talón .. dedos (5 px), 2 de alto
-        for dx in range(4):
-            c.set(x + dx, y, "s")
-            c.set(x + dx, y + 1, "S")
-        c.set(x + (3 if toes_right else 0), y, "a")
-
-    def leg(x, y0, y1):
-        for y in range(y0, y1 + 1):
-            c.set(x, y, "S")
-            c.set(x + 1, y, "s")
-
-    if pose == "idle":
-        leg(12, 27, 29), foot(11, 30)
-        leg(17, 27, 29), foot(16, 30)
-    elif pose == "run1":
-        leg(10, 26, 28), foot(7, 29, toes_right=False)
-        leg(18, 26, 27), foot(18, 28)
-    elif pose == "run2":
-        leg(14, 26, 29), foot(13, 30)
-    elif pose == "jump":
-        leg(12, 28, 29), foot(11, 30)
-        leg(17, 28, 28), foot(17, 29)
-    elif pose == "fall":
-        leg(12, 24, 28), foot(11, 29)
-        leg(18, 24, 27), foot(18, 28)
-
-    # Contornos de color: pelo con marrón oscuro, piel con tostado.
-    skin = set("saSq")
-    add = []
-    for y in range(32):
-        for x in range(32):
-            if c.px[y][x] != ".":
-                continue
-            ns = [c.get(x + dx, y + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))]
-            if any(n not in (".",) for n in ns):
-                add.append((x, y, SKIN_OUT if any(n in skin for n in ns) and not any(n in HAIR for n in ns) else HAIR_OUT))
-    for x, y, ch in add:
-        c.set(x, y, ch)
-    return c
-
-
-FRAMES = ["idle", "run1", "run2", "jump", "fall"]
 
 PORRA = [
     "..........kkkk..",
@@ -571,6 +398,10 @@ def sheet(canvases):
     img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     x0 = 0
     for c in canvases:
+        if getattr(c, "image", None) is not None:
+            img.alpha_composite(c.image, (x0, 0))
+            x0 += c.w
+            continue
         check(c)
         for y in range(c.h):
             for x in range(c.w):
@@ -597,11 +428,9 @@ def cueva():
 
 
 def objetos():
-    spawn = crock("idle")
     spawn_small = Canvas(T, T)
-    for y in range(T):  # cabeza y hombros de Crock, recortados
-        for x in range(T):
-            spawn_small.set(x, y, spawn.get(x + 9, y + 2))
+    face = crock_art.img(crock_art.IDLE).crop((10, 3, 26, 19))
+    spawn_small.image = face
     return [
         ("spawn", spawn_small),
         ("rock", ball("12345", r=6.8)),
@@ -641,12 +470,14 @@ def main():
     os.makedirs(gfx, exist_ok=True)
 
     cu, ob = cueva(), objetos()
-    frames = [crock(p) for p in FRAMES]
+    crock_sheet = Image.new("RGBA", (32 * len(crock_art.FRAMES), 32), (0, 0, 0, 0))
+    for n, f in enumerate(crock_art.FRAMES):
+        crock_sheet.alpha_composite(crock_art.img(f), (32 * n, 0))
     porra = from_rows(PORRA, 16, 7)
     sheets = {
         "cueva": sheet([c for _, c in cu]),
         "objetos": sheet([c for _, c in ob]),
-        "crock": sheet(frames),
+        "crock": crock_sheet,
         "porra": sheet([porra]),
     }
     for name, img in sheets.items():

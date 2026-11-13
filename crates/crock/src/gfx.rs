@@ -27,6 +27,8 @@ impl Drop for Sheet {
 }
 
 pub struct Gfx {
+    /// Textura intermedia donde se dibuja el mundo a resolución de arte.
+    pub target: *mut SDL_Texture,
     pub cueva: Option<Sheet>,
     pub objetos: Option<Sheet>,
     pub crock: Option<Sheet>,
@@ -58,7 +60,25 @@ fn load(canvas: &WindowCanvas, path: &Path, cell_w: f32, cell_h: f32) -> Option<
 impl Gfx {
     pub fn load(canvas: &WindowCanvas, assets: &Path) -> Self {
         let g = assets.join("gfx");
+        let (w, h) = (
+            (crate::render::VIEW_W * ART) as i32,
+            (crate::render::VIEW_H * ART) as i32,
+        );
+        let target = unsafe {
+            let t = sys::render::SDL_CreateTexture(
+                canvas.raw(),
+                sys::pixels::SDL_PIXELFORMAT_RGBA8888,
+                sys::render::SDL_TEXTUREACCESS_TARGET,
+                w,
+                h,
+            );
+            assert!(!t.is_null(), "no se pudo crear la textura de render");
+            // Escalado no entero nítido (SDL 3.4).
+            sys::render::SDL_SetTextureScaleMode(t, sys::surface::SDL_SCALEMODE_PIXELART);
+            t
+        };
         Self {
+            target,
             cueva: load(canvas, &g.join("cueva.png"), 16.0, 16.0),
             objetos: load(canvas, &g.join("objetos.png"), 16.0, 16.0),
             crock: load(canvas, &g.join("crock.png"), 32.0, 32.0),
@@ -73,6 +93,12 @@ fn frect(r: FRect) -> SDL_FRect {
         y: r.y,
         w: r.w,
         h: r.h,
+    }
+}
+
+impl Drop for Gfx {
+    fn drop(&mut self) {
+        unsafe { sys::render::SDL_DestroyTexture(self.target) };
     }
 }
 
