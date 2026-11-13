@@ -429,7 +429,7 @@ def cueva():
 
 def objetos():
     spawn_small = Canvas(T, T)
-    face = crock_art.img(crock_art.IDLE).crop((10, 3, 26, 19))
+    face = crock_art.img(crock_art.IDLE).crop((6, 2, 22, 18))
     spawn_small.image = face
     return [
         ("spawn", spawn_small),

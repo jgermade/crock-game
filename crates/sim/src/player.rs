@@ -148,7 +148,12 @@ impl Player {
         self.prev = self.exact_pos();
 
         // --- Suelo, coyote time y buffer de salto -------------------------
+        let was_on_ground = self.on_ground;
+        let fall_speed = self.vel.1;
         self.on_ground = self.vel.1 >= 0.0 && self.solid_at(map, 0, 1);
+        if self.on_ground && !was_on_ground {
+            events.push(SimEvent::Land { speed: fall_speed });
+        }
         if self.on_ground {
             self.coyote = secs_to_ticks(t.coyote_time);
         } else {
@@ -227,6 +232,7 @@ impl Player {
             self.vel.0 += t.jump_h_boost * input.x as f32;
             self.var_jump_speed = self.vel.1;
             self.var_jump = secs_to_ticks(t.var_jump_time);
+            events.push(SimEvent::Jump);
         }
 
         self.finish_move(map, hit)

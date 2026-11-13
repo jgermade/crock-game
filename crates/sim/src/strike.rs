@@ -246,6 +246,12 @@ pub enum SimEvent {
     },
     /// Se ha completado la última sala.
     ChapterComplete,
+    /// El jugador salta.
+    Jump,
+    /// El jugador toca suelo, con la velocidad de caída que llevaba (px/s).
+    Land {
+        speed: f32,
+    },
     Respawn,
 }
 

@@ -339,7 +339,7 @@ fn draw_player(
     // mano, inclinada hacia delante.
     let f = if facing_left { -1.0 } else { 1.0 };
     // La mano del sprite (puño) queda delante, a media altura.
-    let (hx, hy) = (cx + f * 4.5, cy - 0.5);
+    let (hx, hy) = (cx + f * 5.0, cy - 0.75);
     let (dir, swinging) = if p.swing > 0 {
         (unit(p.strike_dir), true)
     } else {

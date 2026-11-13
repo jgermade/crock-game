@@ -169,7 +169,10 @@ impl Fx {
                 }
             }
             SimEvent::Respawn | SimEvent::RoomEnter { .. } => self.clear(),
-            SimEvent::Whiff | SimEvent::ChapterComplete => {}
+            SimEvent::Whiff
+            | SimEvent::ChapterComplete
+            | SimEvent::Jump
+            | SimEvent::Land { .. } => {}
         }
     }
 

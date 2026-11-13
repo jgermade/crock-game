@@ -5,6 +5,7 @@
 //! simular.
 
 mod assets;
+mod audio;
 mod fx;
 mod gfx;
 mod input;
