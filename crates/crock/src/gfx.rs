@@ -61,7 +61,7 @@ impl Gfx {
         Self {
             cueva: load(canvas, &g.join("cueva.png"), 16.0, 16.0),
             objetos: load(canvas, &g.join("objetos.png"), 16.0, 16.0),
-            crock: load(canvas, &g.join("crock.png"), 24.0, 24.0),
+            crock: load(canvas, &g.join("crock.png"), 32.0, 32.0),
             porra: load(canvas, &g.join("porra.png"), 16.0, 7.0),
         }
     }

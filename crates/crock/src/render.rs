@@ -307,11 +307,11 @@ fn draw_player(
             // Sin golpes: apagado, como pista de que hay que recargar.
             s.set_tint(160, 160, 200);
         }
-        // Celda de 12×12 unidades con los pies abajo y centrada.
+        // Celda de 16×16 unidades (32 px de arte) con los pies abajo y centrada.
         s.draw(
             canvas,
             frame,
-            view.rect(cx - 6.0, y + h - 12.0, 12.0, 12.0),
+            view.rect(cx - 8.0, y + h - 16.0, 16.0, 16.0),
             facing_left,
         );
         s.set_tint(255, 255, 255);
@@ -327,7 +327,8 @@ fn draw_player(
     // La porra: girada hacia el golpe mientras dura el swing; si no, en la
     // mano, inclinada hacia delante.
     let f = if facing_left { -1.0 } else { 1.0 };
-    let (hx, hy) = (cx + f * 3.0, cy + 1.0);
+    // La mano del sprite (puño) queda delante, a media altura.
+    let (hx, hy) = (cx + f * 4.5, cy - 0.5);
     let (dir, swinging) = if p.swing > 0 {
         (unit(p.strike_dir), true)
     } else {
