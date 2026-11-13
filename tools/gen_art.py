@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-"""Genera el pixel art de cROCK (a 16 px por tile) y los tilesets de Tiled.
+"""Genera el pixel art de cROCK (a 24 px por tile) y los tilesets de Tiled.
 
 La física trabaja a 8 unidades por tile; el arte va al doble de resolución
-(cada unidad de juego son 2×2 píxeles de arte). Ejecutar desde la raíz:
+(cada unidad de juego son 3×3 píxeles de arte; Crock viene aparte, de su
+hoja de sprites: tools/import_crock.py). Ejecutar desde la raíz:
 
     python3 tools/gen_art.py [--preview salida.png]
 
 Salida:
     assets/gfx/cueva.png       tiles 16x16 (colisión + decoración)
     assets/gfx/objetos.png     objetos 16x16 (golpeables, enemigos, zonas)
-    assets/gfx/crock.png       Crock, celdas 24x24 (pies en la fila 23, centrado)
-    assets/gfx/porra.png       la porra, 16x7 (empuñadura a la izquierda)
     assets/levels/cueva.tsj, assets/levels/objetos.tsj
 
 Piedra, rocas, pinchos, musgo y fuego se generan geométricamente (con
@@ -26,7 +25,8 @@ import sys
 
 from PIL import Image
 
-T = 16  # píxeles de arte por tile
+T = 24  # píxeles de arte por tile (3 por unidad de juego)
+K = T / 16  # las formas se diseñan en coordenadas de 16 y se muestrean a T
 
 PALETTE = {
     ".": None,
@@ -114,6 +114,27 @@ class Canvas:
         return self
 
 
+def u(v):
+    """Centro del píxel `v` de salida en coordenadas de diseño (16)."""
+    return (v + 0.5) / K
+
+
+def dot(c, x, y, ch):
+    """Pinta el píxel de diseño (x, y) como su bloque escalado."""
+    for yy in range(int(y * K), int((y + 1) * K)):
+        for xx in range(int(x * K), int((x + 1) * K)):
+            c.set(xx, yy, ch)
+
+
+def scaled(src):
+    """Escala un sprite dibujado a 16 px a T px (vecino más próximo)."""
+    c = Canvas(T, T)
+    for y in range(T):
+        for x in range(T):
+            c.set(x, y, src.get(int(x / K), int(y / K)))
+    return c
+
+
 def from_rows(rows, w, h):
     c = Canvas(w, h)
     for y, row in enumerate(rows):
@@ -164,7 +185,7 @@ def stone_top(seed):
     c = stone(seed)
     rnd = random.Random(seed + 99)
     for x in range(T):
-        depth = 3 + (1 if rnd.random() < 0.35 else 0) + (1 if rnd.random() < 0.15 else 0)
+        depth = int((3 + (1 if rnd.random() < 0.35 else 0) + (1 if rnd.random() < 0.15 else 0)) * K)
         for y in range(depth):
             c.set(x, y, "Y" if y == 0 and rnd.random() < 0.5 else "G" if y < 2 else "g")
         c.set(x, depth, "1")
@@ -175,10 +196,12 @@ def fangs():
     """Pinchos hacia arriba: dos colmillos de hueso en la mitad inferior."""
     c = Canvas(T, T)
     for cx in (4, 12):
-        for y in range(5, T):
-            half = (y - 5) * 4 / 10.5
+        for y in range(T):
+            if u(y) < 5:
+                continue
+            half = (u(y) - 5) * 4 / 10.5
             for x in range(T):
-                dx = x + 0.5 - cx
+                dx = u(x) - cx
                 if abs(dx) <= half + 0.25:
                     c.set(x, y, "b" if dx < -0.5 else "B" if dx < 1.2 else "n")
     for x in range(T):
@@ -199,10 +222,12 @@ def rotate(c, times):
 
 def stalactite():
     c = Canvas(T, T)
-    for y in range(11):
-        half = 5.5 * (1 - y / 11)
+    for y in range(T):
+        if u(y) >= 11:
+            continue
+        half = 5.5 * (1 - u(y) / 11)
         for x in range(T):
-            dx = x + 0.5 - 8
+            dx = u(x) - 8
             if abs(dx) <= half:
                 c.set(x, y, "4" if dx < -1.5 else "3" if dx < 1 else "2")
     c.outline()
@@ -214,9 +239,9 @@ def pebbles():
     for cx, cy, r in ((4, 14, 2.2), (10, 14.5, 1.6), (13, 13.8, 1.2)):
         for y in range(T):
             for x in range(T):
-                d = math.hypot(x + 0.5 - cx, y + 0.5 - cy)
+                d = math.hypot(u(x) - cx, u(y) - cy)
                 if d <= r:
-                    c.set(x, y, "4" if (x + 0.5 - cx) + (y + 0.5 - cy) < -0.5 else "3")
+                    c.set(x, y, "4" if (u(x) - cx) + (u(y) - cy) < -0.5 else "3")
     c.outline()
     return c
 
@@ -232,8 +257,8 @@ def ball(ramp, r=6.5, cx=8, cy=8.5, squash=1.0):
     lx, ly, lz = -0.55, -0.65, 0.5
     for y in range(T):
         for x in range(T):
-            nx = (x + 0.5 - cx) / r
-            ny = (y + 0.5 - cy) / (r * squash)
+            nx = (u(x) - cx) / r
+            ny = (u(y) - cy) / (r * squash)
             d2 = nx * nx + ny * ny
             if d2 > 1:
                 continue
@@ -248,8 +273,8 @@ def ball(ramp, r=6.5, cx=8, cy=8.5, squash=1.0):
 def fragile():
     c = ball("utTT", r=6.5)
     for x, y in ((8, 3), (8, 4), (7, 5), (7, 6), (8, 7), (9, 8), (9, 9), (8, 10), (7, 11), (5, 7), (4, 8), (10, 6), (11, 5), (12, 5)):
-        if c.get(x, y) not in (".", "k"):
-            c.set(x, y, "k")
+        if c.get(int(x * K), int(y * K)) not in (".", "k"):
+            dot(c, x, y, "k")
     return c
 
 
@@ -278,13 +303,13 @@ def moss():
     rnd = random.Random(7)
     for y in range(T):
         for x in range(T):
-            nx, ny = (x + 0.5 - 8) / 7.5, (y + 0.5 - 10) / 5
+            nx, ny = (u(x) - 8) / 7.5, (u(y) - 10) / 5
             if nx * nx + ny * ny <= 1 + rnd.uniform(-0.15, 0.1):
                 shade = -ny * 1.2 - nx * 0.4 + rnd.uniform(-0.4, 0.4)
                 c.set(x, y, "Y" if shade > 0.8 else "G" if shade > -0.2 else "g")
     for x in (3, 7, 10, 13):  # hojitas
-        c.set(x, 4, "G")
-        c.set(x, 3, "Y")
+        dot(c, x, 4, "G")
+        dot(c, x, 3, "Y")
     c.outline()
     return c
 
@@ -294,21 +319,21 @@ def beetle():
     # caparazón: media elipse
     for y in range(T):
         for x in range(T):
-            nx, ny = (x + 0.5 - 7) / 6.5, (y + 0.5 - 12) / 7
+            nx, ny = (u(x) - 7) / 6.5, (u(y) - 12) / 7
             if ny <= 0.15 and nx * nx + ny * ny <= 1:
                 light = -nx * 0.5 - ny * 0.9
                 v = light + (BAYER[y % 4][x % 4] / 16 - 0.5) * 0.5
                 c.set(x, y, "D" if v > 0.75 else "C" if v > 0.2 else "c")
     for y in range(5, 13):  # línea de los élitros
-        if c.get(7, y) != ".":
-            c.set(7, y, "c")
+        if c.get(int(7 * K), int(y * K)) != ".":
+            dot(c, 7, y, "c")
     for x, y in ((13, 9), (14, 9), (13, 10), (14, 10), (14, 11), (13, 11)):  # cabeza
-        c.set(x, y, "c")
-    c.set(14, 9, "r")
-    c.set(15, 11, "B")  # mandíbula
+        dot(c, x, y, "c")
+    dot(c, 14, 9, "r")
+    dot(c, 15, 11, "B")  # mandíbula
     for x in (3, 6, 9, 12):  # patas
-        c.set(x, 14, "k")
-        c.set(x - 1, 15, "k")
+        dot(c, x, 14, "k")
+        dot(c, x - 1, 15, "k")
     c.outline()
     return c
 
@@ -340,13 +365,13 @@ def fire():
         for x in range(T):
             # tres lenguas de fuego
             h = max(
-                11 * math.exp(-((x + 0.5 - 4) ** 2) / 6),
-                14 * math.exp(-((x + 0.5 - 9) ** 2) / 7),
-                9 * math.exp(-((x + 0.5 - 13) ** 2) / 4),
+                11 * math.exp(-((u(x) - 4) ** 2) / 6),
+                14 * math.exp(-((u(x) - 9) ** 2) / 7),
+                9 * math.exp(-((u(x) - 13) ** 2) / 4),
             )
-            top = T - h
-            if y >= top:
-                k = (y - top) / max(h, 1) + rnd.uniform(-0.12, 0.12)
+            top = 16 - h
+            if u(y) >= top:
+                k = (u(y) - top) / max(h, 1) + rnd.uniform(-0.12, 0.12)
                 c.set(x, y, "W" if k > 0.85 and y < T - 1 else "y" if k > 0.55 else "o" if k > 0.25 else "R")
     for x in range(T):
         c.set(x, T - 1, "R")
@@ -358,18 +383,15 @@ def exit_arrow():
     c = Canvas(T, T)
     for y in range(T):
         for x in range(T):
-            body = 2 <= x <= 8 and 5 <= y <= 10
-            head = x >= 8 and abs(y + 0.5 - 8) <= (14.5 - x)
+            body = 2 <= u(x) <= 9 and 5 <= u(y) <= 11
+            head = u(x) >= 8.5 and abs(u(y) - 8) <= (14.5 - u(x))
             if body or head:
-                c.set(x, y, "z" if y < 8 else "Z")
+                c.set(x, y, "z" if u(y) < 8 else "Z")
     c.outline()
     return c
 
 
-# --- Crock: dibujado a mano en tools/crock_art.py -----------------------------
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import crock_art  # noqa: E402
+# --- Crock: viene de su hoja de sprites (tools/import_crock.py) -------------
 
 
 PORRA = [
@@ -429,16 +451,18 @@ def cueva():
 
 def objetos():
     spawn_small = Canvas(T, T)
-    face = crock_art.img(crock_art.IDLE).crop((6, 2, 22, 18))
-    spawn_small.image = face
+    # Cabeza de Crock (de la hoja importada) como icono de aparición.
+    crock_png = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets/gfx/crock.png")
+    if os.path.exists(crock_png):
+        spawn_small.image = Image.open(crock_png).crop((16, 14, 16 + T, 14 + T))
     return [
         ("spawn", spawn_small),
         ("rock", ball("12345", r=6.8)),
         ("fragile", fragile()),
-        ("bone", from_rows(BONE, T, T)),
+        ("bone", scaled(from_rows(BONE, 16, 16))),
         ("moss", moss()),
         ("beetle", beetle()),
-        ("bat", from_rows(BAT, T, T)),
+        ("bat", scaled(from_rows(BAT, 16, 16))),
         ("fire", fire()),
         ("exit", exit_arrow()),
     ]
@@ -470,15 +494,10 @@ def main():
     os.makedirs(gfx, exist_ok=True)
 
     cu, ob = cueva(), objetos()
-    crock_sheet = Image.new("RGBA", (32 * len(crock_art.FRAMES), 32), (0, 0, 0, 0))
-    for n, f in enumerate(crock_art.FRAMES):
-        crock_sheet.alpha_composite(crock_art.img(f), (32 * n, 0))
     porra = from_rows(PORRA, 16, 7)
     sheets = {
         "cueva": sheet([c for _, c in cu]),
         "objetos": sheet([c for _, c in ob]),
-        "crock": crock_sheet,
-        "porra": sheet([porra]),
     }
     for name, img in sheets.items():
         img.save(os.path.join(gfx, f"{name}.png"))

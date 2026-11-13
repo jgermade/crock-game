@@ -20,9 +20,9 @@ En lugar del doble salto, el personaje **golpea con la porra contra algo para im
 | Lenguaje | **Rust** (crate `sdl3`, SDL compilado desde fuente y enlazado estático) |
 | Simulación | 240 Hz fijos, render interpolado |
 | Niveles | **Tiled** (`.tmj` JSON), capítulos como listas de salas; solver para comprobar que se pueden pasar |
-| Arte | Pixel art a 16 px por tile (doble resolución que la física, que va a 8) |
-| Protagonista | **Crock**: cavernícola cabezón y bonachón, melena oscura y despeinada, barba larga, ropa de pelo, brazos fuertes y pies grandes |
-| Cámara | Vista de 32×18 tiles (16:9) que sigue a Crock; el mundo se dibuja a resolución de arte y se escala con filtro de pixel art |
+| Arte | Pixel art a 24 px por tile (3 px por unidad; la física va a 8 unidades por tile) |
+| Protagonista | **Crock**: cavernícola bonachón de melena y barba largas, ropa de pelo y porra; hoja de sprites propia (reposo, carrera, salto, caída, golpes) usada a resolución nativa |
+| Cámara | Vista de 26×14,6 tiles (16:9) que sigue a Crock; el mundo se dibuja a resolución de arte y se escala con filtro de pixel art |
 
 ## 2. Mecánica del golpe
 

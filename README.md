@@ -14,10 +14,10 @@ Estado: Fases 0–3 hechas (capítulo 1 jugable). **Fase 4**: audio de baja late
 | `crates/sim` | Simulación determinista, sin SDL ni reloj: `step(&mut World, &Input)` a 240 Hz fijos. Tests incluidos. |
 | `crates/crock` | Capa de plataforma SDL3: ventana, bucle, entrada (teclado + mando), render interpolado con cámara, HUD, métricas. |
 | `tools/solver` | Solver de salas: busca una ruta hasta la salida y la guarda como repetición. |
-| `tools/gen_art.py`, `tools/ascii2tmj.py` | Generador del pixel art y conversor de bocetos ASCII a Tiled. |
+| `tools/gen_art.py`, `tools/import_crock.py`, `tools/svg_pixels.py`, `tools/ascii2tmj.py` | Pixel art del terreno, importador de la hoja de Crock, rasterizador de SVG de píxeles y conversor de bocetos ASCII a Tiled. |
 | `assets/tuning.cfg` | Constantes de movimiento; **se recargan en caliente** al guardar. |
 | `assets/levels/` | Salas de Tiled (`.tmj`), tilesets (`.tsj`) y capítulos (`capituloN.txt`). Ver [docs/NIVELES.md](docs/NIVELES.md). |
-| `assets/gfx/` | Pixel art (16 px por tile, doble resolución que la física). |
+| `assets/gfx/` | Pixel art (24 px por tile, 3 px por unidad de física). Crock viene de su hoja de sprites en `assets/src/`. |
 | `assets/replays/` | Una ruta por sala, encontrada por el solver; los tests comprueban que siguen funcionando. |
 
 ## Compilar y jugar

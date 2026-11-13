@@ -2,7 +2,7 @@
 //!
 //! Convenciones (ver `docs/NIVELES.md`):
 //!
-//! - Tiles de 8×8 o 16×16 px (el arte va a doble resolución; las
+//! - Tiles de 8, 16 o 24 px (el arte va a 3 px por unidad; las
 //!   coordenadas se escalan a la unidad de la física, 8 px por tile), capas
 //!   de tiles en CSV (no base64), mapa no infinito.
 //! - Cada tile del tileset declara su `kind` (propiedad o clase): `solid`,
@@ -130,8 +130,8 @@ pub fn load_map(
 ) -> Result<(TileMap, Vec<String>), String> {
     let raw: RawMap =
         serde_json::from_str(src).map_err(|e| format!("{name}: JSON inválido: {e}"))?;
-    if raw.tilewidth != raw.tileheight || !matches!(raw.tilewidth, 8 | 16) {
-        return Err(format!("{name}: los tiles deben ser de 8×8 o 16×16 px"));
+    if raw.tilewidth != raw.tileheight || !matches!(raw.tilewidth, 8 | 16 | 24) {
+        return Err(format!("{name}: los tiles deben ser de 8, 16 o 24 px"));
     }
     // Factor de editor -> unidades de física.
     let k = TILE as f32 / raw.tilewidth as f32;

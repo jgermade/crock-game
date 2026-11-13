@@ -13,7 +13,7 @@ A partir de ahí, el .tmj es la fuente: se edita en Tiled.
 import json
 import sys
 
-TS = 16  # píxeles por tile en el editor (el arte va a doble resolución)
+TS = 24  # píxeles por tile en el editor (el arte va a 3 px por unidad de juego)
 CUEVA_FIRST = 1
 OBJ_FIRST = 101
 # Índices en los tilesets (ver tools/gen_art.py).

@@ -11,8 +11,22 @@ use sdl3::sys;
 use sys::rect::{SDL_FPoint, SDL_FRect};
 use sys::render::SDL_Texture;
 
-/// Píxeles de arte por unidad de juego.
-pub const ART: f32 = 2.0;
+/// Píxeles de arte por unidad de juego (tiles de 24 px).
+pub const ART: f32 = 3.0;
+
+/// Celda de la hoja de Crock (px de arte; ver tools/import_crock.py).
+pub const CROCK_CELL: f32 = 56.0;
+
+/// Celdas de cada animación en crock.png (mismo orden que import_crock.py).
+pub mod crock_frames {
+    pub const IDLE: (u32, u32) = (0, 5);
+    pub const RUN: (u32, u32) = (5, 12);
+    pub const JUMP: u32 = 17;
+    pub const FALL: (u32, u32) = (18, 2);
+    pub const STRIKE_SIDE: u32 = 20;
+    pub const STRIKE_UP: u32 = 21;
+    pub const STRIKE_DOWN: u32 = 22;
+}
 
 pub struct Sheet {
     tex: *mut SDL_Texture,
@@ -32,7 +46,6 @@ pub struct Gfx {
     pub cueva: Option<Sheet>,
     pub objetos: Option<Sheet>,
     pub crock: Option<Sheet>,
-    pub porra: Option<Sheet>,
 }
 
 fn load(canvas: &WindowCanvas, path: &Path, cell_w: f32, cell_h: f32) -> Option<Sheet> {
@@ -79,10 +92,9 @@ impl Gfx {
         };
         Self {
             target,
-            cueva: load(canvas, &g.join("cueva.png"), 16.0, 16.0),
-            objetos: load(canvas, &g.join("objetos.png"), 16.0, 16.0),
-            crock: load(canvas, &g.join("crock.png"), 32.0, 32.0),
-            porra: load(canvas, &g.join("porra.png"), 16.0, 7.0),
+            cueva: load(canvas, &g.join("cueva.png"), 24.0, 24.0),
+            objetos: load(canvas, &g.join("objetos.png"), 24.0, 24.0),
+            crock: load(canvas, &g.join("crock.png"), CROCK_CELL, CROCK_CELL),
         }
     }
 }

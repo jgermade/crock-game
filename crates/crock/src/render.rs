@@ -13,10 +13,10 @@ use crate::gfx::{ART, Gfx};
 use crate::stats::{HISTORY, Stats};
 
 /// Tamaño de la ventana de juego en unidades (40×23 tiles).
-/// Lo que se ve de la sala (32×18 tiles, 16:9). Las salas más grandes se
+/// Lo que se ve de la sala (26×14,6 tiles, 16:9). Las salas más grandes se
 /// recorren con la cámara.
-pub const VIEW_W: f32 = 256.0;
-pub const VIEW_H: f32 = 144.0;
+pub const VIEW_W: f32 = 208.0;
+pub const VIEW_H: f32 = 117.0;
 
 /// Transformación de unidades de juego a píxeles (de la textura intermedia o
 /// de la ventana): escala, desplazamiento y cámara.
@@ -305,25 +305,44 @@ fn draw_player(
     let facing_left = p.facing < 0;
 
     if let Some(s) = &gfx.crock {
-        let frame = if !p.on_ground {
-            if p.vel.1 < 0.0 { 3 } else { 4 }
+        use crate::gfx::crock_frames as cf;
+        let mut flip = facing_left;
+        let frame = if p.swing > 0 {
+            match p.strike_dir {
+                (_, y) if y < 0 => cf::STRIKE_UP,
+                (_, y) if y > 0 => cf::STRIKE_DOWN,
+                (x, _) => {
+                    // Golpe lateral: sale despedido al otro lado, mirando hacia
+                    // donde vuela, con la porra atrás (hacia lo golpeado).
+                    flip = x > 0;
+                    cf::STRIKE_SIDE
+                }
+            }
+        } else if !p.on_ground {
+            if p.vel.1 < 0.0 {
+                cf::JUMP
+            } else {
+                cf::FALL.0 + ((world.tick / 30) as u32 % cf::FALL.1)
+            }
         } else if p.vel.0.abs() > 10.0 {
-            1 + ((p.pos.0.unsigned_abs() / 6) % 2)
+            // Avanza con la distancia recorrida: los pies no patinan.
+            cf::RUN.0 + (p.pos.0.unsigned_abs() / 3) % cf::RUN.1
         } else {
-            0
+            cf::IDLE.0 + ((world.tick / 60) as u32 % cf::IDLE.1)
         };
         if p.burning {
             s.set_tint(255, 150, 120);
         } else if p.strikes == 0 {
             // Sin golpes: apagado, como pista de que hay que recargar.
-            s.set_tint(160, 160, 200);
+            s.set_tint(170, 170, 210);
         }
-        // Celda de 16×16 unidades (32 px de arte) con los pies abajo y centrada.
+        // Celda con los pies abajo y el cuerpo centrado en la caja.
+        let size = crate::gfx::CROCK_CELL / ART;
         s.draw(
             canvas,
             frame,
-            view.rect(cx - 8.0, y + h - 16.0, 16.0, 16.0),
-            facing_left,
+            view.rect(cx - size / 2.0, y + h - size, size, size),
+            flip,
         );
         s.set_tint(255, 255, 255);
     } else {
@@ -333,31 +352,18 @@ fn draw_player(
             Color::RGB(214, 150, 92)
         });
         let _ = canvas.fill_rect(view.rect(x, y, w, h));
-    }
-
-    // La porra: girada hacia el golpe mientras dura el swing; si no, en la
-    // mano, inclinada hacia delante.
-    let f = if facing_left { -1.0 } else { 1.0 };
-    // La mano del sprite (puño) queda delante, a media altura.
-    let (hx, hy) = (cx + f * 5.0, cy - 0.75);
-    let (dir, swinging) = if p.swing > 0 {
-        (unit(p.strike_dir), true)
-    } else {
-        ((f * 0.5, 0.87), false)
-    };
-    if let Some(s) = &gfx.porra {
-        let angle = (dir.1.atan2(dir.0) as f64).to_degrees();
-        let (len, thick) = (8.0, 3.5);
-        let dst = view.rect(hx, hy - thick / 2.0, len, thick);
-        let flip_v = dir.0 < 0.0;
-        s.draw_rotated(canvas, 0, dst, angle, (0.0, dst.h / 2.0), flip_v);
-    } else {
+        // Sin sprites: la porra como puntos hacia el golpe.
+        let f = if facing_left { -1.0 } else { 1.0 };
+        let dir = if p.swing > 0 {
+            unit(p.strike_dir)
+        } else {
+            (f * 0.5, 0.87)
+        };
         canvas.set_draw_color(Color::RGB(140, 96, 52));
-        let n = if swinging { 5 } else { 3 };
-        for i in 0..n {
+        for i in 0..4 {
             let d = 1.0 + i as f32 * 1.6;
             let _ =
-                canvas.fill_rect(view.rect(hx + dir.0 * d - 1.0, hy + dir.1 * d - 1.0, 2.0, 2.0));
+                canvas.fill_rect(view.rect(cx + dir.0 * d - 1.0, cy + dir.1 * d - 1.0, 2.0, 2.0));
         }
     }
 

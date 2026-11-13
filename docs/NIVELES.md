@@ -7,8 +7,8 @@ una sala se pasa a la siguiente.
 
 ## Convenciones
 
-- **Tiles de 16×16 px** (el arte va al doble de resolución que la física; el
-  juego escala las coordenadas solo). Mapa **no infinito**, capas de tiles
+- **Tiles de 24×24 px** (el arte va a 3 px por unidad de física; el juego
+  escala las coordenadas solo; también acepta mapas de 8 o 16 px). Mapa **no infinito**, capas de tiles
   guardadas en **CSV** (Mapa → Propiedades → Formato de capa de tiles).
 - Tilesets externos: `cueva.tsj` (terreno) y `objetos.tsj` (objetos).
 - Propiedad de mapa `name` (texto): nombre que se ve en el HUD.
@@ -68,5 +68,10 @@ decoración. Útil para bocetar rápido; después el `.tmj` es la fuente.
 
 ## Arte
 
-`tools/gen_art.py` genera `assets/gfx/*.png` y los `.tsj`. Si editas los PNG a
-mano, no vuelvas a ejecutarlo (o lleva los cambios al script).
+- `tools/gen_art.py` genera el terreno y los objetos (`cueva.png`,
+  `objetos.png`) y los `.tsj`. Si editas esos PNG a mano, no vuelvas a
+  ejecutarlo (o lleva los cambios al script).
+- Crock sale de su hoja de sprites, `assets/src/crock_hoja.png` (rasterizada
+  del SVG original con `tools/svg_pixels.py`). `tools/import_crock.py` la
+  recorta, alinea y escribe `assets/gfx/crock.png`; las animaciones que se
+  usan están al principio del script.
