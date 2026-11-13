@@ -1,8 +1,10 @@
-//! El golpe con la porra: objetos golpeables, detección e impulso.
+//! El golpe con la porra: objetos golpeables (incluidos los enemigos),
+//! detección e impulso.
 
-use crate::{Player, Tuning, secs_to_ticks};
+use crate::{DT, ObjectDef, Player, TILE, TileMap, Tuning, secs_to_ticks};
 
-/// Tipos de objeto golpeable. Cada uno con su carácter en los mapas ASCII.
+/// Tipos de objeto golpeable. Cada uno con su carácter en los mapas ASCII y
+/// su nombre de tipo en Tiled.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StrikeKind {
     /// `o` Roca: impulso normal, recarga el golpe. Reutilizable tras un
@@ -14,17 +16,50 @@ pub enum StrikeKind {
     Bone,
     /// `m` Musgo: impulso flojo, recarga el golpe.
     Moss,
+    /// `e` Escarabajo: patrulla una plataforma; tocarlo mata. Golpearlo lo
+    /// aturde (se vuelve inofensivo un rato) y recarga el golpe.
+    Beetle,
+    /// `w` Murciélago: vuela de lado a lado; tocarlo mata. Golpearlo lo
+    /// derriba hasta el próximo reinicio y recarga el golpe.
+    Bat,
 }
 
 impl StrikeKind {
+    pub const ALL: [Self; 6] = [
+        Self::Rock,
+        Self::Fragile,
+        Self::Bone,
+        Self::Moss,
+        Self::Beetle,
+        Self::Bat,
+    ];
+
     pub fn from_char(c: char) -> Option<Self> {
         Some(match c {
             'o' => Self::Rock,
             'x' => Self::Fragile,
             'b' => Self::Bone,
             'm' => Self::Moss,
+            'e' => Self::Beetle,
+            'w' => Self::Bat,
             _ => return None,
         })
+    }
+
+    /// Nombre del tipo en Tiled.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Rock => "rock",
+            Self::Fragile => "fragile",
+            Self::Bone => "bone",
+            Self::Moss => "moss",
+            Self::Beetle => "beetle",
+            Self::Bat => "bat",
+        }
+    }
+
+    pub fn from_name(n: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|k| k.name() == n)
     }
 
     /// Tamaño en píxeles (ancho, alto).
@@ -33,12 +68,14 @@ impl StrikeKind {
             Self::Rock | Self::Fragile => (8, 8),
             Self::Bone => (4, 10),
             Self::Moss => (8, 6),
+            Self::Beetle => (8, 6),
+            Self::Bat => (8, 6),
         }
     }
 
     pub fn impulse_mult(self, t: &Tuning) -> f32 {
         match self {
-            Self::Rock | Self::Fragile => 1.0,
+            Self::Rock | Self::Fragile | Self::Beetle | Self::Bat => 1.0,
             Self::Bone => t.bone_mult,
             Self::Moss => t.moss_mult,
         }
@@ -47,45 +84,130 @@ impl StrikeKind {
     pub fn refills(self) -> bool {
         !matches!(self, Self::Bone)
     }
+
+    pub fn is_enemy(self) -> bool {
+        matches!(self, Self::Beetle | Self::Bat)
+    }
 }
 
-/// Un objeto golpeable en el mundo. No es sólido: el jugador lo atraviesa.
+/// Un objeto golpeable en el mundo. No es sólido: el jugador lo atraviesa
+/// (salvo los enemigos, que matan al tocarlos).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Strikeable {
     pub kind: StrikeKind,
-    /// Centro en píxeles.
-    pub center: (i32, i32),
+    /// Centro actual en píxeles.
+    pub center: (f32, f32),
+    /// Centro inicial (los que se mueven patrullan alrededor de él).
+    pub origin: (f32, f32),
+    /// Recorrido a cada lado (px) y sentido actual (-1 o 1).
+    pub range: f32,
+    pub dir: i8,
     /// Ticks hasta que se puede volver a golpear.
     pub cooldown: u32,
     /// Ticks hasta reaparecer (sólo frágiles rotas). 0 = presente.
     pub broken: u32,
+    /// Ticks restantes de aturdimiento (escarabajo).
+    pub stun: u32,
+    /// Derribado hasta el próximo reinicio (murciélago).
+    pub dead: bool,
+    /// Ticks de vida, para animaciones deterministas.
+    pub age: u32,
 }
 
 impl Strikeable {
-    pub fn new(kind: StrikeKind, center: (i32, i32)) -> Self {
+    pub fn new(kind: StrikeKind, center: (f32, f32)) -> Self {
+        Self::from_def(&ObjectDef::new(kind, center))
+    }
+
+    pub fn from_def(d: &ObjectDef) -> Self {
+        let mut center = d.center;
+        if d.kind == StrikeKind::Beetle {
+            // Apoyado en el suelo de su celda.
+            let cell_bottom = ((center.1 / TILE as f32).floor() + 1.0) * TILE as f32;
+            center.1 = cell_bottom - d.kind.size().1 as f32 / 2.0;
+        }
         Self {
-            kind,
+            kind: d.kind,
             center,
+            origin: center,
+            range: d.range,
+            dir: if d.dir < 0 { -1 } else { 1 },
             cooldown: 0,
             broken: 0,
+            stun: 0,
+            dead: false,
+            age: 0,
         }
     }
 
+    /// ¿Se puede golpear ahora?
     pub fn active(&self) -> bool {
-        self.broken == 0 && self.cooldown == 0
+        !self.dead && self.broken == 0 && self.cooldown == 0
+    }
+
+    /// ¿Mata al tocarlo?
+    pub fn hostile(&self) -> bool {
+        match self.kind {
+            StrikeKind::Beetle => self.stun == 0,
+            StrikeKind::Bat => !self.dead,
+            _ => false,
+        }
     }
 
     /// Caja (x0, y0, x1, y1) en píxeles.
     pub fn bounds(&self) -> (f32, f32, f32, f32) {
         let (w, h) = self.kind.size();
-        let x0 = (self.center.0 - w / 2) as f32;
-        let y0 = (self.center.1 - h / 2) as f32;
+        let x0 = self.center.0 - w as f32 / 2.0;
+        let y0 = self.center.1 - h as f32 / 2.0;
         (x0, y0, x0 + w as f32, y0 + h as f32)
     }
 
-    pub(crate) fn tick(&mut self) {
+    /// Temporizadores: corren también durante el hit-stop.
+    pub(crate) fn tick_timers(&mut self) {
         self.cooldown = self.cooldown.saturating_sub(1);
         self.broken = self.broken.saturating_sub(1);
+    }
+
+    /// Comportamiento (movimiento de enemigos). Se congela en el hit-stop.
+    pub(crate) fn behave(&mut self, map: &TileMap, t: &Tuning) {
+        self.age = self.age.wrapping_add(1);
+        match self.kind {
+            StrikeKind::Beetle => {
+                if self.stun > 0 {
+                    self.stun -= 1;
+                    return;
+                }
+                let (w, h) = self.kind.size();
+                let next = self.center.0 + self.dir as f32 * t.beetle_speed * DT;
+                let half = w as f32 / 2.0;
+                // Píxel justo delante del borde frontal.
+                let front = if self.dir > 0 {
+                    (next + half).floor() as i32
+                } else {
+                    (next - half).floor() as i32
+                };
+                let top = (self.center.1 - h as f32 / 2.0).floor() as i32;
+                let bottom = (self.center.1 + h as f32 / 2.0).round() as i32;
+                let wall = map.solid_in_rect(front, top, 1, h);
+                let ground = map.solid_in_rect(front, bottom, 1, 1);
+                if wall || !ground {
+                    self.dir = -self.dir;
+                } else {
+                    self.center.0 = next;
+                }
+            }
+            StrikeKind::Bat => {
+                if self.dead || self.range <= 0.0 {
+                    return;
+                }
+                // Vaivén senoidal: velocidad máxima `bat_speed`.
+                let secs = self.age as f32 * DT;
+                let w = t.bat_speed / self.range;
+                self.center.0 = self.origin.0 + self.dir as f32 * self.range * (secs * w).sin();
+                self.center.1 = self.origin.1 + 2.0 * (secs * 5.0).sin();
+            }
+            _ => {}
+        }
     }
 }
 
@@ -105,6 +227,25 @@ pub enum SimEvent {
     },
     /// El golpe terminó sin tocar nada.
     Whiff,
+    /// Un enemigo derribado o aturdido.
+    EnemyDown {
+        at: (f32, f32),
+        kind: StrikeKind,
+    },
+    /// El jugador entra en fuego con la porra cargada: se queda sin golpes.
+    Burn {
+        at: (f32, f32),
+    },
+    /// El jugador muere (justo antes de reaparecer).
+    Death {
+        at: (f32, f32),
+    },
+    /// Se ha pasado a otra sala.
+    RoomEnter {
+        room: usize,
+    },
+    /// Se ha completado la última sala.
+    ChapterComplete,
     Respawn,
 }
 
@@ -187,7 +328,7 @@ impl Player {
             }
             let b = o.bounds();
             if hb.0 < b.2 && b.0 < hb.2 && hb.1 < b.3 && b.1 < hb.3 {
-                let d = (o.center.0 as f32 - hcx).powi(2) + (o.center.1 as f32 - hcy).powi(2);
+                let d = (o.center.0 - hcx).powi(2) + (o.center.1 - hcy).powi(2);
                 if best.is_none_or(|(_, bd)| d < bd) {
                     best = Some((i, d));
                 }
@@ -229,16 +370,27 @@ impl Player {
             self.strikes = t.max_strikes as u8;
         }
 
-        let at = (o.center.0 as f32, o.center.1 as f32);
+        let at = o.center;
         o.cooldown = secs_to_ticks(t.object_cooldown);
         events.push(SimEvent::Strike {
             at,
             dir,
             kind: o.kind,
         });
-        if o.kind == StrikeKind::Fragile {
-            o.broken = secs_to_ticks(t.fragile_respawn);
-            events.push(SimEvent::Break { at });
+        match o.kind {
+            StrikeKind::Fragile => {
+                o.broken = secs_to_ticks(t.fragile_respawn);
+                events.push(SimEvent::Break { at });
+            }
+            StrikeKind::Beetle => {
+                o.stun = secs_to_ticks(t.beetle_stun);
+                events.push(SimEvent::EnemyDown { at, kind: o.kind });
+            }
+            StrikeKind::Bat => {
+                o.dead = true;
+                events.push(SimEvent::EnemyDown { at, kind: o.kind });
+            }
+            _ => {}
         }
         Some(Hit { dir })
     }

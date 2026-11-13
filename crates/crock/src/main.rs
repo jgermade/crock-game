@@ -6,6 +6,7 @@
 
 mod assets;
 mod fx;
+mod gfx;
 mod input;
 mod render;
 mod stats;
@@ -117,8 +118,11 @@ struct Options {
     screenshot: Option<String>,
     /// Entrada scriptada para pruebas: mantener derecha y saltar periódicamente.
     autoplay: bool,
-    /// Sala inicial (índice en `assets::LEVELS`).
-    level: usize,
+    /// Capítulo inicial (índice o parte del nombre) y sala (desde 1).
+    chapter: String,
+    room: usize,
+    /// Empezar con el overlay de métricas visible.
+    overlay: bool,
     /// Reproducir entradas grabadas (una por tick).
     replay: Option<String>,
     /// Grabar las entradas desde el último reinicio al salir.
@@ -133,7 +137,9 @@ fn parse_args() -> Options {
         frames: None,
         screenshot: None,
         autoplay: false,
-        level: 0,
+        chapter: String::new(),
+        room: 1,
+        overlay: false,
         replay: None,
         record: None,
     };
@@ -148,17 +154,14 @@ fn parse_args() -> Options {
             "--autoplay" => o.autoplay = true,
             "--replay" => o.replay = Some(v.to_string()),
             "--record" => o.record = Some(v.to_string()),
-            "--level" => {
-                o.level = assets::LEVELS
-                    .iter()
-                    .position(|(n, _)| *n == v)
-                    .or_else(|| v.parse().ok())
-                    .unwrap_or(0)
-            }
+            "--chapter" => o.chapter = v.to_string(),
+            "--room" => o.room = v.parse().unwrap_or(1),
+            "--overlay" => o.overlay = true,
             "-h" | "--help" => {
                 println!(
                     "crock [--vsync=on|adaptive|off] [--fps=N] [--fullscreen]\n\
-                     \x20     [--level=golpe|movimiento] [--replay=f] [--record=f]\n\
+                     \x20     [--chapter=N|nombre] [--room=N] [--overlay]\n\
+                     \x20     [--replay=f] [--record=f]\n\
                      \x20     [--frames=N] [--screenshot=out.bmp] [--autoplay]"
                 );
                 std::process::exit(0);
@@ -251,8 +254,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let assets = assets::assets_dir();
     let mut tuning_watch = assets::TuningWatcher::new(&assets);
-    let mut level = opts.level;
-    let mut world = World::new(assets::load_level(&assets, level), Default::default());
+    let gfx = gfx::Gfx::load(&canvas, &assets);
+    let chapters = assets::chapters(&assets);
+    let mut chapter = opts
+        .chapter
+        .parse::<usize>()
+        .ok()
+        .map(|n| n.saturating_sub(1))
+        .or_else(|| {
+            let q = opts.chapter.to_lowercase();
+            chapters
+                .iter()
+                .position(|c| !q.is_empty() && c.name.to_lowercase().contains(&q))
+        })
+        .unwrap_or(0)
+        .min(chapters.len() - 1);
+    let mut world = World::with_rooms(
+        assets::load_chapter(&chapters[chapter])?,
+        Default::default(),
+    );
+    if opts.room > 1 {
+        world.goto_room(opts.room - 1);
+    }
+    let mut banner: Option<(String, u64)> = None;
     if let Some((t, warns)) = tuning_watch.poll(now_ns()) {
         world.tuning = t;
         warns
@@ -270,7 +294,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let mut recording: Vec<crock_sim::Input> = Vec::new();
 
-    let mut show_overlay = true;
+    let mut show_overlay = opts.overlay;
     let mut cap_idx = FPS_CAPS
         .iter()
         .position(|&c| c == opts.fps_cap)
@@ -339,14 +363,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             true
                         }
                         Scancode::F5 | Scancode::F6 => {
-                            if sc == Scancode::F6 {
-                                level = (level + 1) % assets::LEVELS.len();
+                            // F5 recarga el capítulo (misma sala); F6 pasa al siguiente.
+                            let room = if sc == Scancode::F6 {
+                                chapter = (chapter + 1) % chapters.len();
+                                0
+                            } else {
+                                world.room
+                            };
+                            match assets::load_chapter(&chapters[chapter]) {
+                                Ok(rooms) => {
+                                    let (tuning, deaths) = (world.tuning.clone(), world.deaths);
+                                    world = World::with_rooms(rooms, tuning);
+                                    world.deaths = if sc == Scancode::F5 { deaths } else { 0 };
+                                    world.goto_room(room);
+                                    message = Some((chapters[chapter].name.clone(), now_ns()));
+                                }
+                                Err(e) => {
+                                    eprintln!("[crock] {e}");
+                                    message = Some((e, now_ns()));
+                                }
                             }
-                            world.map = assets::load_level(&assets, level);
-                            world.restart();
                             recording.clear();
-                            let name = assets::LEVELS[level].0;
-                            message = Some((format!("sala: {name}"), now_ns()));
+                            true
+                        }
+                        Scancode::F7 | Scancode::F8 => {
+                            let n = world.rooms.len();
+                            let room = if sc == Scancode::F8 {
+                                world.room + 1
+                            } else {
+                                world.room + n - 1
+                            };
+                            world.goto_room(room % n);
+                            recording.clear();
                             true
                         }
                         Scancode::F11 => {
@@ -424,12 +472,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Efectos visuales a partir de los eventos de la simulación.
         for ev in world.events.drain(..) {
+            if matches!(ev, crock_sim::SimEvent::ChapterComplete) {
+                let msg = format!(
+                    "{} completado - muertes: {}",
+                    chapters[chapter].name, world.deaths
+                );
+                banner = Some((msg, frame_start));
+                world.deaths = 0;
+            }
             fx.handle(&ev);
         }
         fx.update(frame_dt);
 
         // --- Render -------------------------------------------------------
-        render::draw_world(&mut canvas, &world, alpha, &fx, show_overlay);
+        let view = render::draw_world(&mut canvas, &world, alpha, &fx, &gfx, show_overlay);
+        let hud = [
+            format!(
+                "{} {}/{}",
+                world.map.name,
+                world.room + 1,
+                world.rooms.len()
+            ),
+            format!("muertes {}", world.deaths),
+        ];
+        let banner_text = banner
+            .as_ref()
+            .filter(|(_, t)| frame_start - t < 4_000_000_000)
+            .map(|(m, _)| m.as_str());
+        render::draw_hud(&mut canvas, &view, &hud, banner_text);
         if show_overlay {
             let (favg, fmax) = stats.frame_ms();
             let (wavg, wmax) = stats.work_ms();
@@ -468,11 +538,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ),
                 format!(
                     "golpes {}  ventana {:2}  float {:2}  hitstop {:2}  sala {}",
-                    p.strikes,
-                    p.strike_window,
-                    p.float,
-                    world.hitstop,
-                    assets::LEVELS[level].0
+                    p.strikes, p.strike_window, p.float, world.hitstop, chapters[chapter].name
                 ),
             ];
             let pads = input.gamepad_names();
@@ -481,7 +547,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 format!("mandos: {}", pads.join(", "))
             });
-            lines.push("R reiniciar  F1 overlay  F5 recargar  F6 sala  Esc salir".into());
+            lines.push(
+                "R reiniciar  F1 overlay  F5 recargar  F6 capitulo  F7/F8 sala  Esc salir".into(),
+            );
             if let Some((m, t)) = &message
                 && frame_start - t < 3_000_000_000
             {

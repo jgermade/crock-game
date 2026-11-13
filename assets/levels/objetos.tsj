@@ -1,0 +1,53 @@
+{
+ "type": "tileset",
+ "version": "1.10",
+ "tiledversion": "1.10.2",
+ "name": "objetos",
+ "tilewidth": 16,
+ "tileheight": 16,
+ "tilecount": 9,
+ "columns": 9,
+ "margin": 0,
+ "spacing": 0,
+ "image": "../gfx/objetos.png",
+ "imagewidth": 144,
+ "imageheight": 16,
+ "tiles": [
+  {
+   "id": 0,
+   "type": "spawn"
+  },
+  {
+   "id": 1,
+   "type": "rock"
+  },
+  {
+   "id": 2,
+   "type": "fragile"
+  },
+  {
+   "id": 3,
+   "type": "bone"
+  },
+  {
+   "id": 4,
+   "type": "moss"
+  },
+  {
+   "id": 5,
+   "type": "beetle"
+  },
+  {
+   "id": 6,
+   "type": "bat"
+  },
+  {
+   "id": 7,
+   "type": "fire"
+  },
+  {
+   "id": 8,
+   "type": "exit"
+  }
+ ]
+}

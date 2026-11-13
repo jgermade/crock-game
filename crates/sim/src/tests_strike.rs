@@ -263,7 +263,7 @@ fn restart_restores_objects() {
 
 #[test]
 fn shipped_strike_level_parses() {
-    let m = TileMap::parse(include_str!("../../../assets/levels/golpe.txt")).unwrap();
+    let m = crate::test_util::level("golpe");
     assert_eq!((m.w, m.h), (40, 23));
     for k in [
         StrikeKind::Rock,
@@ -271,15 +271,15 @@ fn shipped_strike_level_parses() {
         StrikeKind::Bone,
         StrikeKind::Moss,
     ] {
-        assert!(m.objects.iter().any(|(o, _)| *o == k), "falta {k:?}");
+        assert!(m.objects.iter().any(|o| o.kind == k), "falta {k:?}");
     }
 }
 
 #[test]
 fn deterministic_with_strikes() {
-    let level = include_str!("../../../assets/levels/golpe.txt");
-    let mut a = world(level);
-    let mut b = world(level);
+    let level = "golpe";
+    let mut a = World::new(crate::test_util::level(level), Tuning::default());
+    let mut b = World::new(crate::test_util::level(level), Tuning::default());
     let dirs = [(0, 1), (1, 0), (-1, -1), (1, 1), (0, -1), (-1, 0)];
     for i in 0..SIM_HZ * 15 {
         let d = dirs[(i / 50) as usize % dirs.len()];

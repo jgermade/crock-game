@@ -26,4 +26,5 @@ jobs:
           SDL_AUDIO_DRIVER: dummy
         run: |
           cargo run -p crock -- --vsync=off --fps=120 --frames=240 --autoplay
-          cargo run -p crock -- --vsync=off --fps=240 --frames=300 --replay=assets/replays/cruce-golpe.rep
+          cargo run -p crock -- --vsync=off --fps=240 --frames=300 --chapter=1 --room=3 --replay=assets/replays/c1-03-el-foso.rep
+          cargo run -p crock -- --vsync=off --fps=240 --frames=300 --chapter=golpe --replay=assets/replays/golpe.rep

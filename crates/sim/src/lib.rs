@@ -10,9 +10,12 @@ mod map;
 mod player;
 pub mod replay;
 mod strike;
+pub mod tiled;
 mod tuning;
 
-pub use map::{TILE, Tile, TileMap};
+use std::sync::Arc;
+
+pub use map::{Dir4, ObjectDef, TILE, Tile, TileMap, Zone, ZoneKind};
 pub use player::{Aabb, Player};
 pub use strike::{SimEvent, StrikeKind, Strikeable, unit};
 pub use tuning::Tuning;
@@ -51,11 +54,17 @@ pub struct Input {
 /// Estado completo del juego.
 #[derive(Clone, Debug)]
 pub struct World {
-    pub map: TileMap,
+    /// Salas del capítulo, en orden (datos inmutables y compartidos: copiar
+    /// un `World` es barato). `map` es la sala actual.
+    pub rooms: Arc<[Arc<TileMap>]>,
+    pub room: usize,
+    pub map: Arc<TileMap>,
     pub player: Player,
     pub tuning: Tuning,
     pub objects: Vec<Strikeable>,
     pub tick: u64,
+    /// Muertes acumuladas (en todo el capítulo).
+    pub deaths: u32,
     /// Ticks restantes de hit-stop (la simulación del jugador se congela).
     pub hitstop: u32,
     /// Ticks restantes de temblor de pantalla y su dirección.
@@ -66,13 +75,25 @@ pub struct World {
 }
 
 impl World {
+    /// Mundo de una sola sala.
     pub fn new(map: TileMap, tuning: Tuning) -> Self {
+        Self::with_rooms(vec![map], tuning)
+    }
+
+    /// Mundo con varias salas que se recorren en orden por sus salidas.
+    pub fn with_rooms(rooms: Vec<TileMap>, tuning: Tuning) -> Self {
+        assert!(!rooms.is_empty(), "hace falta al menos una sala");
+        let rooms: Arc<[Arc<TileMap>]> = rooms.into_iter().map(Arc::new).collect();
+        let map = rooms[0].clone();
         let mut w = Self {
             player: Player::spawn(map.spawn),
+            rooms,
+            room: 0,
             map,
             tuning,
             objects: Vec::new(),
             tick: 0,
+            deaths: 0,
             hitstop: 0,
             shake: 0,
             shake_dir: (0, 0),
@@ -82,18 +103,30 @@ impl World {
         w
     }
 
-    /// Reinicio instantáneo: jugador y objetos a su estado inicial, sin transición.
+    /// Salta a una sala concreta (empezando en su punto de aparición).
+    pub fn goto_room(&mut self, room: usize) {
+        self.room = room % self.rooms.len();
+        self.map = self.rooms[self.room].clone();
+        self.restart();
+        self.events.push(SimEvent::RoomEnter { room: self.room });
+    }
+
+    /// Reinicio instantáneo de la sala: jugador y objetos a su estado
+    /// inicial, sin transición.
     pub fn restart(&mut self) {
         self.player = Player::spawn(self.map.spawn);
-        self.objects = self
-            .map
-            .objects
-            .iter()
-            .map(|&(k, c)| Strikeable::new(k, c))
-            .collect();
+        self.objects = self.map.objects.iter().map(Strikeable::from_def).collect();
         self.hitstop = 0;
         self.shake = 0;
         self.events.push(SimEvent::Respawn);
+    }
+
+    /// Muerte: se cuenta, se avisa y se reinicia la sala en el mismo tick.
+    pub fn die(&mut self) {
+        let at = self.player.center();
+        self.deaths += 1;
+        self.restart();
+        self.events.push(SimEvent::Death { at });
     }
 
     /// Hash barato del estado relevante, para tests de determinismo.
@@ -105,6 +138,8 @@ impl World {
             h = h.wrapping_mul(0x0000_0100_0000_01b3);
         };
         mix(self.tick);
+        mix(self.room as u64);
+        mix(self.deaths as u64);
         mix(p.pos.0 as u64);
         mix(p.pos.1 as u64);
         mix(p.rem.0.to_bits() as u64);
@@ -114,6 +149,8 @@ impl World {
         mix(p.strikes as u64);
         for o in &self.objects {
             mix(o.cooldown as u64 | (o.broken as u64) << 32);
+            mix(o.center.0.to_bits() as u64 | (o.center.1.to_bits() as u64) << 32);
+            mix(o.stun as u64 | (o.dead as u64) << 32);
         }
         h
     }
@@ -122,10 +159,9 @@ impl World {
 /// Avanza la simulación exactamente un tick de [`DT`] segundos.
 pub fn step(world: &mut World, input: &Input) {
     world.tick += 1;
-    let t = &world.tuning;
 
     for o in &mut world.objects {
-        o.tick();
+        o.tick_timers();
     }
     world.shake = world.shake.saturating_sub(1);
 
@@ -133,10 +169,15 @@ pub fn step(world: &mut World, input: &Input) {
         // Congelado, pero sin perder entradas: un salto o golpe pulsado
         // durante el hit-stop se ejecuta en cuanto termina.
         world.hitstop -= 1;
-        world.player.buffer_during_hitstop(t, input);
+        world.player.buffer_during_hitstop(&world.tuning, input);
         return;
     }
 
+    for o in &mut world.objects {
+        o.behave(&world.map, &world.tuning);
+    }
+
+    let t = &world.tuning;
     if let Some(hit) =
         world
             .player
@@ -147,13 +188,56 @@ pub fn step(world: &mut World, input: &Input) {
         world.shake_dir = hit.dir;
     }
 
-    // Caer fuera del mapa = reinicio instantáneo.
-    if world.player.pos.1 > world.map.height_px() + 32 {
-        world.restart();
+    let p = &world.player;
+    let (x, y, w, h) = (p.pos.0, p.pos.1, Player::W, Player::H);
+
+    // Peligros: pinchos, enemigos y caer al vacío. El golpe se resuelve
+    // antes, así que golpear a un enemigo justo al tocarlo salva la vida.
+    let fell = y > world.map.height_px() + 16;
+    let spiked = world.map.spike_hit(x, y, w, h, p.vel);
+    // Caja de daño de los enemigos 1 px más pequeña por cada lado: perdona
+    // los roces.
+    let bitten = world.objects.iter().any(|o| {
+        let (x0, y0, x1, y1) = o.bounds();
+        o.hostile()
+            && (x as f32) < x1 - 1.0
+            && x0 + 1.0 < (x + w) as f32
+            && (y as f32) < y1 - 1.0
+            && y0 + 1.0 < (y + h) as f32
+    });
+    if fell || spiked || bitten {
+        world.die();
+        return;
+    }
+
+    // Zonas.
+    let mut in_fire = false;
+    let mut at_exit = false;
+    for z in &world.map.zones {
+        if z.overlaps(x, y, w, h) {
+            match z.kind {
+                ZoneKind::Fire => in_fire = true,
+                ZoneKind::Exit => at_exit = true,
+            }
+        }
+    }
+    world.player.set_burning(in_fire, &mut world.events);
+
+    if at_exit {
+        if world.room + 1 >= world.rooms.len() {
+            world.events.push(SimEvent::ChapterComplete);
+        }
+        world.goto_room(world.room + 1);
     }
 }
 
 #[cfg(test)]
+mod test_util;
+#[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_replays;
+#[cfg(test)]
+mod tests_rooms;
 #[cfg(test)]
 mod tests_strike;

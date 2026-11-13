@@ -5,16 +5,6 @@ use std::time::SystemTime;
 
 use crock_sim::{TileMap, Tuning};
 
-/// Salas disponibles: nombre de fichero (sin extensión) y copia embebida
-/// por si no se encuentra la carpeta de assets.
-pub const LEVELS: [(&str, &str); 2] = [
-    ("golpe", include_str!("../../../assets/levels/golpe.txt")),
-    (
-        "movimiento",
-        include_str!("../../../assets/levels/movimiento.txt"),
-    ),
-];
-
 /// Busca la carpeta `assets`: `$CROCK_ASSETS`, `./assets`, junto al
 /// ejecutable, o la del repositorio (útil con `cargo run`).
 pub fn assets_dir() -> PathBuf {
@@ -35,17 +25,66 @@ pub fn assets_dir() -> PathBuf {
         .unwrap_or_else(|| "assets".into())
 }
 
-pub fn load_level(dir: &Path, index: usize) -> TileMap {
-    let (name, embedded) = LEVELS[index % LEVELS.len()];
-    let path = dir.join(format!("levels/{name}.txt"));
-    let src = std::fs::read_to_string(&path).unwrap_or_else(|_| embedded.to_string());
-    TileMap::parse(&src).unwrap_or_else(|e| {
-        eprintln!(
-            "[crock] error en {}: {e}; uso la copia embebida",
-            path.display()
-        );
-        TileMap::parse(embedded).expect("nivel embebido válido")
-    })
+/// Un capítulo: nombre y salas en orden.
+pub struct Chapter {
+    pub name: String,
+    pub rooms: Vec<PathBuf>,
+}
+
+/// Capítulos disponibles: los que listan `levels/capitulo*.txt` y, al
+/// final, las salas de pruebas sueltas.
+pub fn chapters(dir: &Path) -> Vec<Chapter> {
+    let levels = dir.join("levels");
+    let mut lists: Vec<PathBuf> = std::fs::read_dir(&levels)
+        .map(|rd| {
+            rd.filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| {
+                    p.extension().is_some_and(|e| e == "txt")
+                        && p.file_name()
+                            .is_some_and(|n| n.to_string_lossy().starts_with("capitulo"))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    lists.sort();
+    let mut out = Vec::new();
+    for list in lists {
+        let Ok(src) = std::fs::read_to_string(&list) else {
+            continue;
+        };
+        let rooms: Vec<PathBuf> = src
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .map(|l| levels.join(l))
+            .collect();
+        let stem = list.file_stem().unwrap().to_string_lossy();
+        let name = stem.replacen("capitulo", "Capítulo ", 1);
+        out.push(Chapter { name, rooms });
+    }
+    for sandbox in ["golpe", "movimiento"] {
+        out.push(Chapter {
+            name: format!("Pruebas: {sandbox}"),
+            rooms: vec![levels.join(format!("{sandbox}.tmj"))],
+        });
+    }
+    out
+}
+
+/// Carga las salas de un capítulo. Avisos por la consola.
+pub fn load_chapter(ch: &Chapter) -> Result<Vec<TileMap>, String> {
+    let mut rooms = Vec::new();
+    for path in &ch.rooms {
+        let (map, warnings) = crock_sim::tiled::load_file(path)?;
+        for w in warnings {
+            eprintln!("[crock] {w}");
+        }
+        rooms.push(map);
+    }
+    if rooms.is_empty() {
+        return Err(format!("{}: sin salas", ch.name));
+    }
+    Ok(rooms)
 }
 
 /// Vigila `tuning.cfg` comprobando su fecha de modificación cada poco.

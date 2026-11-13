@@ -61,6 +61,12 @@ pub struct Tuning {
     /// Hit-stop y temblor de pantalla en el impacto (s).
     pub hitstop: f32,
     pub shake_time: f32,
+
+    /// Velocidad del escarabajo (px/s) y tiempo que queda aturdido (s).
+    pub beetle_speed: f32,
+    pub beetle_stun: f32,
+    /// Velocidad máxima del murciélago (px/s).
+    pub bat_speed: f32,
 }
 
 impl Default for Tuning {
@@ -94,6 +100,9 @@ impl Default for Tuning {
             moss_mult: 0.7,
             hitstop: 0.05,
             shake_time: 0.12,
+            beetle_speed: 20.0,
+            beetle_stun: 1.5,
+            bat_speed: 30.0,
         }
     }
 }
@@ -129,6 +138,9 @@ impl Tuning {
             "moss_mult" => &mut self.moss_mult,
             "hitstop" => &mut self.hitstop,
             "shake_time" => &mut self.shake_time,
+            "beetle_speed" => &mut self.beetle_speed,
+            "beetle_stun" => &mut self.beetle_stun,
+            "bat_speed" => &mut self.bat_speed,
             _ => return None,
         })
     }

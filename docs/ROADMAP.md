@@ -19,6 +19,9 @@ En lugar del doble salto, el personaje **golpea con la porra contra algo para im
 | Física | Propia y determinista (colisión AABB, sin motor de física genérico) |
 | Lenguaje | **Rust** (crate `sdl3`, SDL compilado desde fuente y enlazado estático) |
 | Simulación | 240 Hz fijos, render interpolado |
+| Niveles | **Tiled** (`.tmj` JSON), capítulos como listas de salas; solver para comprobar que se pueden pasar |
+| Arte | Pixel art a 16 px por tile (doble resolución que la física, que va a 8) |
+| Protagonista | **Crock**: cavernícola delgado con melena larga que le cubre el cuerpo (asoman cara, brazos y pies) |
 
 ## 2. Mecánica del golpe
 
@@ -71,10 +74,10 @@ En lugar del doble salto, el personaje **golpea con la porra contra algo para im
 - [ ] **Punto de decisión:** ¿el golpe encadenado resulta divertido?
 
 ### Fase 3 — Contenido
-- [ ] Carga de niveles desde Tiled/LDtk
-- [ ] Más tipos de objeto y enemigos
-- [ ] Muerte y reinicio instantáneo
-- [ ] Primeros niveles jugables
+- [x] Carga de niveles desde Tiled/LDtk *(Tiled, `.tmj`; ver docs/NIVELES.md)*
+- [x] Más tipos de objeto y enemigos *(escarabajo, murciélago, pinchos, fuego, salidas)*
+- [x] Muerte y reinicio instantáneo
+- [x] Primeros niveles jugables *(capítulo 1, 5 salas, comprobadas con el solver)*
 
 ### Fase 4 — Pulido y publicación
 - [ ] Audio con baja latencia
@@ -118,3 +121,4 @@ gantt
 - ¿8 direcciones o analógico 360°?
 - ¿Objetivo de refresco/hardware concreto (144 Hz+, handheld, Steam Deck)?
 - ¿Se publica en Steam?
+- ¿Power-ups? Propuesta: pocos, temporales y propios de cada sala (porra de mamut, sílex que prende la porra, pluma para planear…); como única mejora permanente, la doble carga de golpe.

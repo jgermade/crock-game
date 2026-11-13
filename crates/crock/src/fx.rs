@@ -30,6 +30,8 @@ pub fn kind_color(kind: StrikeKind) -> (u8, u8, u8) {
         StrikeKind::Fragile => (196, 170, 128),
         StrikeKind::Bone => (236, 228, 206),
         StrikeKind::Moss => (110, 168, 84),
+        StrikeKind::Beetle => (84, 128, 196),
+        StrikeKind::Bat => (132, 96, 156),
     }
 }
 
@@ -120,8 +122,54 @@ impl Fx {
                     },
                 );
             }
-            SimEvent::Respawn => self.clear(),
-            SimEvent::Whiff => {}
+            SimEvent::EnemyDown { at, kind } => {
+                self.burst(
+                    at,
+                    (0.0, -1.0),
+                    12,
+                    BurstSpec {
+                        speed: 60.0,
+                        spread: 5.0,
+                        life: 0.45,
+                        gravity: 400.0,
+                        color: kind_color(kind),
+                    },
+                );
+            }
+            SimEvent::Burn { at } => {
+                // Brasas: la porra se quema.
+                self.burst(
+                    at,
+                    (0.0, -1.0),
+                    14,
+                    BurstSpec {
+                        speed: 45.0,
+                        spread: 1.4,
+                        life: 0.5,
+                        gravity: -60.0,
+                        color: (255, 150, 50),
+                    },
+                );
+            }
+            SimEvent::Death { at } => {
+                // Mechones de pelo por todas partes.
+                for color in [(86, 56, 36), (126, 86, 54), (226, 168, 112)] {
+                    self.burst(
+                        at,
+                        (0.0, -1.0),
+                        10,
+                        BurstSpec {
+                            speed: 110.0,
+                            spread: 6.3,
+                            life: 0.5,
+                            gravity: 250.0,
+                            color,
+                        },
+                    );
+                }
+            }
+            SimEvent::Respawn | SimEvent::RoomEnter { .. } => self.clear(),
+            SimEvent::Whiff | SimEvent::ChapterComplete => {}
         }
     }
 

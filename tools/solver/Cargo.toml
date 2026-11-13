@@ -1,0 +1,8 @@
+[package]
+name = "crock-solver"
+version.workspace = true
+edition.workspace = true
+description = "Busca una ruta que complete una sala y la guarda como repetición."
+
+[dependencies]
+crock-sim = { path = "../../crates/sim" }

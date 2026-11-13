@@ -52,7 +52,7 @@ const HOLD: Input = Input {
 
 #[test]
 fn shipped_test_level_parses() {
-    let m = TileMap::parse(include_str!("../../../assets/levels/movimiento.txt")).unwrap();
+    let m = crate::test_util::level("movimiento");
     assert_eq!((m.w, m.h), (40, 23));
 }
 
@@ -304,9 +304,9 @@ fn deterministic() {
             }
         })
         .collect();
-    let level = include_str!("../../../assets/levels/movimiento.txt");
-    let mut a = world(level);
-    let mut b = world(level);
+    let level = "movimiento";
+    let mut a = World::new(crate::test_util::level(level), Tuning::default());
+    let mut b = World::new(crate::test_util::level(level), Tuning::default());
     for inp in &script {
         step(&mut a, inp);
         step(&mut b, inp);

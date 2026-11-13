@@ -1,0 +1,107 @@
+{
+ "type": "tileset",
+ "version": "1.10",
+ "tiledversion": "1.10.2",
+ "name": "cueva",
+ "tilewidth": 16,
+ "tileheight": 16,
+ "tilecount": 9,
+ "columns": 9,
+ "margin": 0,
+ "spacing": 0,
+ "image": "../gfx/cueva.png",
+ "imagewidth": 144,
+ "imageheight": 16,
+ "tiles": [
+  {
+   "id": 0,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 1,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "solid"
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "spike_up"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "spike_down"
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "spike_left"
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "spike_right"
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "properties": [
+    {
+     "name": "kind",
+     "type": "string",
+     "value": "deco"
+    }
+   ]
+  }
+ ]
+}

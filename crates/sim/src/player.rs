@@ -48,6 +48,8 @@ pub struct Player {
     pub strike_buffer: u32,
     /// Dirección capturada al pulsar el golpe en buffer.
     pub strike_aim: (i8, i8),
+    /// Dentro de fuego: la porra arde y no hay golpes.
+    pub burning: bool,
 }
 
 impl Player {
@@ -76,6 +78,7 @@ impl Player {
             float: 0,
             strike_buffer: 0,
             strike_aim: (0, 0),
+            burning: false,
         }
     }
 
@@ -103,6 +106,19 @@ impl Player {
             self.prev.0 + (cx - self.prev.0) * alpha,
             self.prev.1 + (cy - self.prev.1) * alpha,
         )
+    }
+
+    /// Fuego: mientras se está dentro no hay golpes (ni recarga).
+    pub(crate) fn set_burning(&mut self, burning: bool, events: &mut Vec<SimEvent>) {
+        if burning && (self.strikes > 0 || self.strike_window > 0) {
+            events.push(SimEvent::Burn { at: self.center() });
+        }
+        if burning {
+            self.strikes = 0;
+            self.strike_window = 0;
+            self.strike_buffer = 0;
+        }
+        self.burning = burning;
     }
 
     /// Durante el hit-stop el jugador no se actualiza, pero las pulsaciones
@@ -143,7 +159,7 @@ impl Player {
         } else {
             self.jump_buffer = self.jump_buffer.saturating_sub(1);
         }
-        if self.on_ground && self.float == 0 && self.strike_window == 0 {
+        if self.on_ground && self.float == 0 && self.strike_window == 0 && !self.burning {
             self.strikes = t.max_strikes as u8;
         }
 
