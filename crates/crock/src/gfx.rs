@@ -26,6 +26,10 @@ pub mod crock_frames {
     pub const STRIKE_SIDE: u32 = 20;
     pub const STRIKE_UP: u32 = 21;
     pub const STRIKE_DOWN: u32 = 22;
+    pub const HANG: u32 = 24;
+    /// Desplazamiento vertical (unidades) del frame de colgado para que el
+    /// puño quede apoyado sobre el borde de la cornisa.
+    pub const HANG_DROP: f32 = 4.1;
 }
 
 pub struct Sheet {

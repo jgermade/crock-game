@@ -103,6 +103,28 @@ fn down_drops_from_ledge() {
 }
 
 #[test]
+fn grabbing_refills_the_strike() {
+    let mut w = world();
+    run(&mut w, SIM_HZ, inp(1, 0, false));
+    step(&mut w, &inp(1, 0, true));
+    w.player.strikes = 0;
+    for _ in 0..SIM_HZ {
+        step(
+            &mut w,
+            &Input {
+                jump_held: true,
+                ..inp(1, 0, false)
+            },
+        );
+        if w.player.hanging != 0 {
+            break;
+        }
+    }
+    assert_eq!(w.player.hanging, 1);
+    assert_eq!(w.player.strikes, 1, "agarrarse recarga el golpe");
+}
+
+#[test]
 fn ledge_grab_can_be_disabled() {
     let mut w = world();
     w.tuning.ledge_grab = 0.0;

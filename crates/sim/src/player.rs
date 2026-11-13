@@ -324,6 +324,10 @@ impl Player {
             self.var_jump = 0;
             self.hanging = d;
             self.facing = d;
+            // Agarrarse recarga el golpe (salvo con la porra ardiendo).
+            if !self.burning {
+                self.strikes = t.max_strikes as u8;
+            }
             events.push(SimEvent::Grab { at: self.center() });
             return;
         }

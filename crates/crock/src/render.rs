@@ -368,7 +368,7 @@ fn draw_player(
         let frame = if p.hanging != 0 {
             // Colgado de la cornisa: brazo arriba, mirando a la pared.
             flip = p.hanging < 0;
-            cf::JUMP
+            cf::HANG
         } else if p.swing > 0 {
             match p.strike_dir {
                 (_, y) if y < 0 => cf::STRIKE_UP,
@@ -400,10 +400,12 @@ fn draw_player(
         }
         // Celda con los pies abajo y el cuerpo centrado en la caja.
         let size = crate::gfx::CROCK_CELL / ART;
+        // Colgado: más abajo, con los puños sobre el borde.
+        let drop = if p.hanging != 0 { cf::HANG_DROP } else { 0.0 };
         s.draw(
             canvas,
             frame,
-            view.rect(cx - size / 2.0, y + h - size, size, size),
+            view.rect(cx - size / 2.0, y + h - size + drop, size, size),
             flip,
         );
         s.set_tint(255, 255, 255);
