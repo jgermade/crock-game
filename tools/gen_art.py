@@ -468,6 +468,182 @@ def objetos():
     ]
 
 
+# --- Fondo de cueva con parallax (paleta de la escena de referencia) ---------
+#
+# Tres tiras que se repiten en horizontal; el juego las desplaza a distinta
+# velocidad según la cámara. Su "suelo" queda a BG_BASE px del borde inferior.
+
+BG = {
+    "night": (22, 19, 30),  # #16131e
+    "base": (42, 41, 59),  # #2a293b
+    "rim": (53, 59, 81),  # #353b51
+    "light": (72, 78, 102),  # #484e66
+    "glow": (88, 92, 112),
+    "mid": (34, 33, 49),
+    "midlit": (48, 52, 72),
+    "near": (16, 13, 22),
+}
+BG_H = 420
+BG_BASE = 100
+
+
+def _wrapdx(x, cx, w):
+    d = abs(x - cx)
+    return min(d, w - d)
+
+
+def _sdx(x, cx, w):
+    """Distancia con signo y vuelta horizontal."""
+    d = x - cx
+    if d > w / 2:
+        d -= w
+    elif d < -w / 2:
+        d += w
+    return d
+
+
+class Spike:
+    """Estalactita/estalagmita orgánica: perfil abultado, punta roma y
+    bordes ondulados."""
+
+    def __init__(self, rnd, w, lmin, lmax, wmin, wmax):
+        self.x = rnd.uniform(0, w)
+        self.len = rnd.uniform(lmin, lmax)
+        self.wd = rnd.uniform(wmin, wmax)
+        self.ph = rnd.uniform(0, 6.28)
+        self.bulge = rnd.uniform(0.45, 0.8)
+
+    def half(self, t):
+        """Media anchura a la fracción `t` (0 = base, 1 = punta)."""
+        if t < 0 or t > 1:
+            return -1
+        wob = 1 + 0.12 * math.sin(t * 11 + self.ph) + 0.06 * math.sin(t * 29 + self.ph * 2)
+        return self.wd / 2 * (1 - t) ** self.bulge * wob + (1.2 if t < 0.97 else 0)
+
+
+def _noise2(x, y, w, seed):
+    """Ruido suave periódico en x (suma de senos)."""
+    k = 2 * math.pi / w
+    return (
+        math.sin(x * k * 3 + seed) * math.cos(y / 37 + seed * 0.7)
+        + 0.5 * math.sin(x * k * 7 + y / 23 + seed * 1.3)
+        + 0.25 * math.sin(x * k * 13 - y / 11 + seed * 2.1)
+    ) / 1.75
+
+
+def bg_far(w=480):
+    rnd = random.Random(101)
+    img = Image.new("RGBA", (w, BG_H), BG["base"] + (255,))
+    px = img.load()
+    ground = BG_H - BG_BASE - 24
+    ceiling = [40 + 12 * math.sin(x * 2 * math.pi / w * 3) + 5 * math.sin(x / 7.3) for x in range(w)]
+    hang = [Spike(rnd, w, 25, 90, 10, 26) for _ in range(12)]
+    rise = [Spike(rnd, w, 30, 90, 26, 54) for _ in range(6)]
+    for y in range(BG_H):
+        for x in range(w):
+            # Cámara del fondo iluminada: centro alto, bordes rotos por ruido.
+            vy = 1 - ((y - 215) / 150) ** 2
+            k = 2 * math.pi / w
+            v = vy + 0.16 * math.sin(x * k * 2 + 1.0) + 0.09 * math.sin(x * k * 5 + y / 41) + 0.04 * math.sin(x * k * 11)
+            t = BAYER[y % 4][x % 4] / 16 * 0.1
+            col = BG["base"]
+            if v > 0.78 + t:
+                col = BG["glow"]
+            elif v > 0.48 + t:
+                col = BG["light"]
+            elif v > 0.28 + t:
+                col = BG["rim"]
+            for sp in hang:
+                if abs(_sdx(x, sp.x, w)) < sp.half((y - ceiling[x]) / sp.len):
+                    col = BG["base"]
+            for sp in rise:
+                if abs(_sdx(x, sp.x, w)) < sp.half((ground - y) / sp.len):
+                    col = BG["rim"] if col in (BG["light"], BG["glow"]) else BG["base"]
+            if y > ground + 8 * math.sin(x * 2 * math.pi / w * 4) + 3 * math.sin(x / 9):
+                col = BG["base"]
+            if y < ceiling[x]:
+                col = BG["night"]
+            px[x, y] = col + (255,)
+    return img
+
+
+def bg_mid(w=560):
+    rnd = random.Random(202)
+    img = Image.new("RGBA", (w, BG_H), (0, 0, 0, 0))
+    px = img.load()
+    ground = BG_H - BG_BASE
+    top = [18 + 8 * math.sin(x * 2 * math.pi / w * 5) + 3 * math.sin(x / 6) for x in range(w)]
+    cols = [Spike(rnd, w, 60, 150, 30, 60) for _ in range(5)]
+    hang = [Spike(rnd, w, 30, 150, 12, 32) for _ in range(15)]
+    for y in range(BG_H):
+        for x in range(w):
+            col = None
+            for sp in cols:
+                d = _sdx(x, sp.x, w)
+                h = sp.half((ground - y) / sp.len)
+                if abs(d) < h:
+                    col = BG["midlit"] if d < -h + 2.5 else BG["mid"]
+            for sp in hang:
+                d = _sdx(x, sp.x, w)
+                h = sp.half((y - top[x]) / sp.len)
+                if abs(d) < h:
+                    col = BG["midlit"] if d < -h + 2 else BG["mid"]
+            if y < top[x]:
+                col = BG["mid"]
+            if y > ground + 5 * math.sin(x * 2 * math.pi / w * 6) + 2 * math.sin(x / 5):
+                col = BG["mid"]
+            if col:
+                px[x, y] = col + (255,)
+    return img
+
+
+def bg_near(w=640):
+    rnd = random.Random(303)
+    img = Image.new("RGBA", (w, BG_H), (0, 0, 0, 0))
+    px = img.load()
+    ground = BG_H - BG_BASE + 14
+    near = BG["near"] + (255,)
+
+    def put(x, y):
+        if 0 <= y < BG_H:
+            px[int(x) % w, int(y)] = near
+
+    for x in range(w):  # suelo ondulado
+        top = ground + 5 * math.sin(x / 21) + 3 * math.sin(x / 7)
+        for y in range(int(top), BG_H):
+            put(x, y)
+    for _ in range(14):  # rocas redondeadas
+        cx, r = rnd.uniform(0, w), rnd.uniform(8, 22)
+        for y in range(int(ground - r), ground + 2):
+            for x in range(int(cx - r * 1.4), int(cx + r * 1.4)):
+                if ((x - cx) / 1.4) ** 2 + (y - ground) ** 2 <= r * r:
+                    put(x, y)
+    for _ in range(26):  # helechos: frondas curvas
+        bx = rnd.uniform(0, w)
+        for f in range(rnd.randint(4, 7)):
+            ang = math.radians(rnd.uniform(-75, 75) - 90)
+            ln = rnd.uniform(14, 34)
+            curl = rnd.uniform(-0.04, 0.04)
+            x, y = bx, ground
+            for k in range(int(ln)):
+                ang += curl
+                x += math.cos(ang)
+                y += math.sin(ang)
+                put(x, y)
+                put(x + 1, y)
+                leaf = 3 * (1 - k / ln) + 1
+                if k % 2 == 1:  # foliolos
+                    for r in range(1, int(leaf) + 1):
+                        put(x + math.cos(ang + 1.3) * r, y + math.sin(ang + 1.3) * r)
+                        put(x + math.cos(ang - 1.3) * r, y + math.sin(ang - 1.3) * r)
+    for _ in range(90):  # briznas de hierba
+        bx, ln = rnd.uniform(0, w), rnd.randint(4, 12)
+        lean = rnd.uniform(-0.5, 0.5)
+        for k in range(ln):
+            put(bx + lean * k, ground - k)
+    return img
+
+
 def tileset(name, image, tiles, count):
     return {
         "type": "tileset",
@@ -501,6 +677,8 @@ def main():
     }
     for name, img in sheets.items():
         img.save(os.path.join(gfx, f"{name}.png"))
+    for name, fn in (("fondo_lejano", bg_far), ("fondo_medio", bg_mid), ("fondo_cerca", bg_near)):
+        fn().save(os.path.join(gfx, f"{name}.png"))
 
     cueva_tiles = [{"id": i, "properties": [{"name": "kind", "type": "string", "value": k}]} for i, (k, _) in enumerate(cu)]
     objetos_tiles = [{"id": i, "type": k} for i, (k, _) in enumerate(ob)]

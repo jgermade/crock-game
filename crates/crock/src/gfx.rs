@@ -43,6 +43,8 @@ impl Drop for Sheet {
 pub struct Gfx {
     /// Textura intermedia donde se dibuja el mundo a resolución de arte.
     pub target: *mut SDL_Texture,
+    /// Fondo de cueva: capas lejana, media y cercana (tiras horizontales).
+    pub fondo: [Option<Sheet>; 3],
     pub cueva: Option<Sheet>,
     pub objetos: Option<Sheet>,
     pub crock: Option<Sheet>,
@@ -92,6 +94,11 @@ impl Gfx {
         };
         Self {
             target,
+            fondo: [
+                load(canvas, &g.join("fondo_lejano.png"), 480.0, 420.0),
+                load(canvas, &g.join("fondo_medio.png"), 560.0, 420.0),
+                load(canvas, &g.join("fondo_cerca.png"), 640.0, 420.0),
+            ],
             cueva: load(canvas, &g.join("cueva.png"), 24.0, 24.0),
             objetos: load(canvas, &g.join("objetos.png"), 24.0, 24.0),
             crock: load(canvas, &g.join("crock.png"), CROCK_CELL, CROCK_CELL),

@@ -68,8 +68,8 @@ decoración. Útil para bocetar rápido; después el `.tmj` es la fuente.
 
 ## Arte
 
-- `tools/gen_art.py` genera el terreno y los objetos (`cueva.png`,
-  `objetos.png`) y los `.tsj`. Si editas esos PNG a mano, no vuelvas a
+- `tools/gen_art.py` genera el terreno, los objetos y el fondo de cueva
+  (`cueva.png`, `objetos.png`, `fondo_*.png`) y los `.tsj`. Si editas esos PNG a mano, no vuelvas a
   ejecutarlo (o lleva los cambios al script).
 - Crock sale de su hoja de sprites, `assets/src/crock_hoja.png` (rasterizada
   del SVG original con `tools/svg_pixels.py`). `tools/import_crock.py` la

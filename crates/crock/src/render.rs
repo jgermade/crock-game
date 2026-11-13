@@ -107,8 +107,9 @@ pub fn draw_world(
     }
 
     unsafe { sys::render::SDL_SetRenderTarget(canvas.raw(), gfx.target) };
-    canvas.set_draw_color(Color::RGB(24, 20, 30));
+    canvas.set_draw_color(Color::RGB(22, 19, 30));
     canvas.clear();
+    draw_background(canvas, world, &view, gfx);
     draw_tiles(canvas, world, &view, gfx);
     draw_zones(canvas, world, &view, gfx);
     draw_objects(canvas, world, &view, gfx);
@@ -140,6 +141,63 @@ pub fn draw_world(
         cam_x,
         cam_y,
     }
+}
+
+/// Parallax de cada capa del fondo (horizontal, vertical).
+const PARALLAX: [(f32, f32); 3] = [(0.1, 0.05), (0.3, 0.15), (0.55, 0.3)];
+
+/// Fondo de cueva en tres capas con parallax, y motas y luciérnagas.
+fn draw_background(canvas: &mut WindowCanvas, world: &World, view: &View, gfx: &Gfx) {
+    let max_cam_y = (world.map.height_px() as f32 - VIEW_H).max(0.0);
+    for (layer, (fx, fy)) in gfx.fondo.iter().zip(PARALLAX) {
+        let Some(s) = layer else { continue };
+        let (w, h) = (s.cell_w / ART, s.cell_h / ART);
+        // Abajo de la pantalla cuando la cámara está abajo del todo; baja
+        // un poco al subir (parallax vertical).
+        let top = view.cam_y + VIEW_H - h + (max_cam_y - view.cam_y.min(max_cam_y)) * fy;
+        let start = view.cam_x - (view.cam_x * fx).rem_euclid(w);
+        let mut x = start;
+        while x < view.cam_x + VIEW_W {
+            s.draw(canvas, 0, view.rect(x, top, w, h), false);
+            x += w;
+        }
+        if fx == PARALLAX[0].0 && top > view.cam_y {
+            // Por encima de la capa lejana: oscuridad del techo.
+            canvas.set_draw_color(Color::RGB(22, 19, 30));
+            let _ =
+                canvas.fill_rect(view.rect(view.cam_x, view.cam_y, VIEW_W, top - view.cam_y + 0.5));
+        }
+    }
+
+    // Motas de polvo y luciérnagas: posiciones fijas por índice, deriva lenta
+    // y parallax propio. Todo determinista a partir del tick.
+    let t = world.tick as f32 / crock_sim::SIM_HZ as f32;
+    canvas.set_blend_mode(sdl3::render::BlendMode::Blend);
+    let px = 1.0 / ART;
+    for i in 0..48u32 {
+        let hsh = |k: u32| {
+            let v = (i.wrapping_mul(2_654_435_761) ^ k.wrapping_mul(40_503))
+                .wrapping_mul(2_246_822_519);
+            (v >> 8) as f32 / (1u32 << 24) as f32
+        };
+        let firefly = i % 6 == 0;
+        let (bx, by) = (hsh(1) * (VIEW_W + 20.0), hsh(2) * VIEW_H);
+        let drift_x = t * (2.0 + hsh(3) * 4.0) + (t * 0.7 + hsh(4) * 6.3).sin() * 3.0;
+        let drift_y = (t * 0.9 + hsh(5) * 6.3).sin() * 4.0 - t * (1.0 + hsh(6) * 2.0);
+        let par = 0.4 + hsh(7) * 0.3;
+        let sx = (bx + drift_x - view.cam_x * par).rem_euclid(VIEW_W + 20.0) - 10.0;
+        let sy = (by + drift_y - view.cam_y * par * 0.5).rem_euclid(VIEW_H + 10.0) - 5.0;
+        let (x, y) = (view.cam_x + sx, view.cam_y + sy);
+        if firefly {
+            let blink = ((t * (1.5 + hsh(8)) + hsh(9) * 6.3).sin() * 0.5 + 0.5).powi(2);
+            canvas.set_draw_color(Color::RGBA(232, 214, 110, (60.0 + 195.0 * blink) as u8));
+            let _ = canvas.fill_rect(view.rect(x, y, 2.0 * px, 2.0 * px));
+        } else {
+            canvas.set_draw_color(Color::RGBA(150, 156, 184, 90));
+            let _ = canvas.fill_rect(view.rect(x, y, px, px));
+        }
+    }
+    canvas.set_blend_mode(sdl3::render::BlendMode::None);
 }
 
 fn visible_range(view: &View, w: i32, h: i32) -> (i32, i32, i32, i32) {

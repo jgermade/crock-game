@@ -17,7 +17,7 @@ Estado: Fases 0–3 hechas (capítulo 1 jugable). **Fase 4**: audio de baja late
 | `tools/gen_art.py`, `tools/import_crock.py`, `tools/svg_pixels.py`, `tools/ascii2tmj.py` | Pixel art del terreno, importador de la hoja de Crock, rasterizador de SVG de píxeles y conversor de bocetos ASCII a Tiled. |
 | `assets/tuning.cfg` | Constantes de movimiento; **se recargan en caliente** al guardar. |
 | `assets/levels/` | Salas de Tiled (`.tmj`), tilesets (`.tsj`) y capítulos (`capituloN.txt`). Ver [docs/NIVELES.md](docs/NIVELES.md). |
-| `assets/gfx/` | Pixel art (24 px por tile, 3 px por unidad de física). Crock viene de su hoja de sprites en `assets/src/`. |
+| `assets/gfx/` | Pixel art (24 px por tile, 3 px por unidad de física): terreno, objetos, fondo de cueva en tres capas con parallax. Crock viene de su hoja de sprites en `assets/src/`. |
 | `assets/replays/` | Una ruta por sala, encontrada por el solver; los tests comprueban que siguen funcionando. |
 
 ## Compilar y jugar
