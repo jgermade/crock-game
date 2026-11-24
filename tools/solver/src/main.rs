@@ -10,6 +10,13 @@
 //!     [--out=ruta.rep] [--beam=600] [--secs=20] [--tuning=assets/tuning.cfg]
 //! ```
 //!
+//! `--step=N`: ticks entre decisiones (8 por defecto; 24 = 10 decisiones
+//! por segundo, como un jugador poco preciso).
+//!
+//! Con `--jitter=ruta.rep` no busca: reproduce la ruta muchas veces
+//! moviendo cada cambio de entrada hasta ±`--jitter-ticks` (4 por defecto,
+//! ~17 ms) y da el porcentaje de veces que aún llega a la salida.
+//!
 //! Con `--trace=ruta.rep` no busca: reproduce la ruta y lista lo que pasa
 //! (golpes, agarres, colmillo...), para ver si usa la mecánica prevista.
 
@@ -22,8 +29,17 @@ use crock_sim::{
     Input, SIM_HZ, SimEvent, TILE, Tile, TileMap, Tuning, World, ZoneKind, replay, step,
 };
 
-/// Ticks entre decisiones (30 decisiones por segundo).
-const DECISION_TICKS: usize = 8;
+/// Ticks entre decisiones: 8 por defecto (30 decisiones por segundo);
+/// `--step=N` lo cambia (más alto = jugador menos preciso).
+static DECISION_TICKS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(8);
+
+/// `--late=N`: cada decisión tiene que sobrevivir también si se ejecuta N
+/// ticks tarde (rutas con margen, como las de una persona).
+static LATE_TICKS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+fn decision_ticks() -> usize {
+    DECISION_TICKS.load(std::sync::atomic::Ordering::Relaxed)
+}
 /// Máximo de estados del haz por tile.
 const PER_CELL: usize = 4;
 
@@ -36,8 +52,8 @@ struct Action {
 }
 
 impl Action {
-    fn inputs(self) -> [Input; DECISION_TICKS] {
-        let mut out = [Input::default(); DECISION_TICKS];
+    fn inputs(self) -> Vec<Input> {
+        let mut out = vec![Input::default(); decision_ticks()];
         for (i, inp) in out.iter_mut().enumerate() {
             inp.x = self.x;
             inp.jump_held = self.jump != 0;
@@ -201,6 +217,34 @@ fn key(w: &World) -> Key {
     )
 }
 
+/// ¿Sobrevive si la acción `a` empieza `--late` ticks tarde (manteniendo
+/// mientras la anterior)? Comprueba la decisión y otros tantos ticks más.
+fn survives_late(w: &World, prev: Action, a: Action) -> bool {
+    let late = LATE_TICKS.load(std::sync::atomic::Ordering::Relaxed);
+    if late == 0 || a.x == prev.x && a.jump == prev.jump && a.strike.is_none() {
+        return true;
+    }
+    let mut w = w.clone();
+    let mut hold = *prev.inputs().last().unwrap();
+    hold.jump_pressed = false;
+    hold.strike_pressed = false;
+    let ai = a.inputs();
+    let seq = std::iter::repeat_n(hold, late)
+        .chain(ai.iter().copied())
+        .chain(std::iter::repeat_n(*ai.last().unwrap(), late));
+    for inp in seq {
+        step(&mut w, &inp);
+        for e in w.events.drain(..) {
+            match e {
+                SimEvent::Death { .. } => return false,
+                SimEvent::RoomEnter { .. } | SimEvent::ChapterComplete => return true,
+                _ => {}
+            }
+        }
+    }
+    true
+}
+
 enum Outcome {
     Alive(Box<World>),
     Dead,
@@ -232,6 +276,8 @@ fn main() {
     let mut secs = 20.0f32;
     let mut tuning_path = None;
     let mut trace_path = None;
+    let mut jitter_path = None;
+    let mut jitter_ticks = 4i32;
     for a in std::env::args().skip(1) {
         let (k, v) = a.split_once('=').unwrap_or((a.as_str(), ""));
         match k {
@@ -240,6 +286,16 @@ fn main() {
             "--secs" => secs = v.parse().expect("--secs=S"),
             "--tuning" => tuning_path = Some(v.to_string()),
             "--trace" => trace_path = Some(v.to_string()),
+            "--jitter" => jitter_path = Some(v.to_string()),
+            "--jitter-ticks" => jitter_ticks = v.parse().expect("--jitter-ticks=N"),
+            "--late" => LATE_TICKS.store(
+                v.parse::<usize>().expect("--late=N"),
+                std::sync::atomic::Ordering::Relaxed,
+            ),
+            "--step" => DECISION_TICKS.store(
+                v.parse::<usize>().expect("--step=N").max(1),
+                std::sync::atomic::Ordering::Relaxed,
+            ),
             _ if !a.starts_with("--") => map_path = Some(a.clone()),
             _ => panic!("argumento desconocido: {a}"),
         }
@@ -263,6 +319,11 @@ fn main() {
         trace(map, tuning, &p);
         return;
     }
+    if let Some(p) = jitter_path {
+        let ok = jitter(map, tuning, &p, jitter_ticks, 300);
+        // Código de salida útil en scripts: falla por debajo del 50 %.
+        std::process::exit(if ok >= 0.5 { 0 } else { 1 });
+    }
     let field = distance_field(&map);
     let name = map.name.clone();
     let mut start = World::new(map, tuning);
@@ -283,7 +344,7 @@ fn main() {
         world: start,
         hist: 0,
     }];
-    let max_depth = (secs * SIM_HZ as f32 / DECISION_TICKS as f32) as usize;
+    let max_depth = (secs * SIM_HZ as f32 / decision_ticks() as f32) as usize;
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
     let t0 = Instant::now();
 
@@ -296,12 +357,17 @@ fn main() {
                 .enumerate()
                 .map(|(ci, ns)| {
                     let acts = &acts;
+                    let history = &history;
                     s.spawn(move || {
                         let mut out = Vec::new();
                         for (ni, n) in ns.iter().enumerate() {
                             let can_strike = n.world.player.strikes > 0;
+                            let prev = history[n.hist].1;
                             for &a in acts {
                                 if a.strike.is_some() && !can_strike {
+                                    continue;
+                                }
+                                if n.hist != 0 && !survives_late(&n.world, prev, a) {
                                     continue;
                                 }
                                 out.push((ci * chunk + ni, a, simulate(n.world.clone(), a)));
@@ -432,7 +498,7 @@ fn main() {
             let p = &next[0].world.player;
             eprintln!(
                 "  t={:5.1}s  mejor distancia {:5.1}  pos {:?}  estados {}",
-                depth as f32 * DECISION_TICKS as f32 / SIM_HZ as f32,
+                depth as f32 * decision_ticks() as f32 / SIM_HZ as f32,
                 next[0].score,
                 p.pos,
                 next.len()
@@ -480,4 +546,80 @@ fn trace(map: TileMap, tuning: Tuning, path: &str) {
             println!("{t:6.2}s  celda {cell:?}  {what}");
         }
     }
+}
+
+/// ¿La ruta completa la sala sin morir?
+fn completes(map: &TileMap, tuning: &Tuning, inputs: &[Input]) -> bool {
+    let mut w = World::new(map.clone(), tuning.clone());
+    w.events.clear();
+    for inp in inputs {
+        step(&mut w, inp);
+        for e in w.events.drain(..) {
+            match e {
+                SimEvent::Death { .. } => return false,
+                SimEvent::RoomEnter { .. } | SimEvent::ChapterComplete => return true,
+                _ => {}
+            }
+        }
+    }
+    false
+}
+
+/// Tolerancia de una ruta a errores de tiempo: cada cambio de entrada se
+/// adelanta o retrasa al azar hasta `max` ticks. Devuelve la fracción de
+/// intentos que llegan a la salida.
+fn jitter(map: TileMap, tuning: Tuning, path: &str, max: i32, trials: u32) -> f32 {
+    let src = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{path}: {e}"));
+    let inputs = replay::decode(&src).unwrap_or_else(|e| panic!("{path}: {e}"));
+    // Tramos de entrada constante (el primer tick de cada uno lleva las
+    // pulsaciones).
+    let mut segs: Vec<(usize, Input)> = Vec::new();
+    for (i, inp) in inputs.iter().enumerate() {
+        if segs.last().is_none_or(|(_, l)| l != inp) {
+            segs.push((i, *inp));
+        }
+    }
+    let mut rng = 0x2545_f491u32;
+    let mut rand = || {
+        rng ^= rng << 13;
+        rng ^= rng >> 17;
+        rng ^= rng << 5;
+        rng
+    };
+    let mut ok = 0;
+    for _ in 0..trials {
+        let mut starts: Vec<i64> = Vec::with_capacity(segs.len());
+        for (k, (s, _)) in segs.iter().enumerate() {
+            let d = (rand() % (2 * max as u32 + 1)) as i64 - max as i64;
+            let mut st = if k == 0 { 0 } else { *s as i64 + d };
+            if let Some(&prev) = starts.last() {
+                st = st.max(prev + 1);
+            }
+            starts.push(st);
+        }
+        let end = *starts.last().unwrap() + (inputs.len() - segs.last().unwrap().0) as i64;
+        let mut out = Vec::with_capacity(end as usize);
+        for (k, (_, inp)) in segs.iter().enumerate() {
+            let next = starts.get(k + 1).copied().unwrap_or(end);
+            for t in 0..(next - starts[k]) {
+                let mut i = *inp;
+                if t > 0 {
+                    i.jump_pressed = false;
+                    i.strike_pressed = false;
+                }
+                out.push(i);
+            }
+        }
+        if completes(&map, &tuning, &out) {
+            ok += 1;
+        }
+    }
+    let frac = ok as f32 / trials as f32;
+    println!(
+        "{}: {:.0} % de {trials} intentos con ±{max} ticks ({:.0} ms)",
+        map.name,
+        frac * 100.0,
+        max as f32 * 1000.0 / SIM_HZ as f32
+    );
+    frac
 }

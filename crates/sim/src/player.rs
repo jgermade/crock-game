@@ -189,6 +189,7 @@ impl Player {
             t,
             input.strike_pressed,
             (input.aim_x, input.aim_y),
+            map,
             objects,
             events,
         );

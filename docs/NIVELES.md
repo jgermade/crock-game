@@ -58,6 +58,12 @@ El solver es una búsqueda en haz sobre la simulación: encuentra *una* ruta
 `tuning.cfg`. Si dice «sin salida» o «no encontrada», la sala probablemente no
 se puede pasar; prueba con `--beam=2000 --secs=40` antes de rediseñarla.
 
+`tools/solve_all.sh` busca rutas **con margen humano**: una decisión cada
+50 ms (`--step=12`) y cada una tiene que aguantar llegar 50 ms tarde
+(`--late=12`). Si una sala sólo sale con precisión de máquina, avisa.
+`--jitter=ruta.rep` mide cuánto aguanta una ruta grabada si se mueven sus
+tiempos al azar (sin corregir sobre la marcha, así que es muy pesimista).
+
 Para ver qué hace una ruta (golpes, agarres, colmillo…) y comprobar que usa
 la mecánica prevista: `crock-solver sala.tmj --trace=ruta.rep` (con
 `SOLVER_DEBUG=1`, también la posición cada 0,1 s). Un buen control de una sala

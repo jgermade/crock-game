@@ -25,9 +25,11 @@ ANIMS = [
     ("run", [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]),
     ("jump", [19]),
     ("fall", [20, 21]),
-    ("strike_side", [28]),
-    ("strike_up", [26]),
-    ("strike_down", [30]),
+    # Golpes: preparación y golpe (el render los encadena en `swing`).
+    ("strike_side", [28, 30]),
+    ("strike_up", [25, 26]),
+    ("strike_down", [29, 25]),
+    ("strike_end", [24]),
     ("land", [23]),
     ("hang", ["hang"]),  # se construye a partir de la figura 19 (ver make_hang)
 ]

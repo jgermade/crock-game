@@ -83,8 +83,8 @@ cargo test --workspace
 
 ## El golpe (Fase 2)
 
-Golpear un objeto lanza al troglodita en la dirección **opuesta** a la del
-golpe, a velocidad fija, durante un instante sin gravedad; luego la física
+Golpear un objeto **o el terreno** (pared, suelo o techo pegados) lanza al
+troglodita en la dirección **opuesta** a la del golpe, a velocidad fija, durante un instante sin gravedad; luego la física
 normal. La dirección (8) se fija en el instante de pulsar; sin dirección, golpea
 hacia donde mira. Si al pulsar no hay nada a tiro, el golpe sigue activo
 `strike_window` segundos y conecta si algo entra en la caja; si no, falla y hay
@@ -97,8 +97,10 @@ queda en buffer, así que se puede encadenar sin esperar al frame exacto.
 | Roca frágil (se rompe y reaparece) | `x` | normal | sí |
 | Hueso colgante | `b` | fuerte (×1,35) | **no** |
 | Musgo | `m` | flojo (×0,7) | sí |
+| Pared, suelo o techo | | normal | **no** |
 
-Hay 1 golpe por recarga; tocar suelo también recarga. Con el overlay (F1) se ve
+Hay 1 golpe por recarga; tocar suelo también recarga. Golpear el suelo es un
+supersalto; golpear una pared, un salto de pared (gasta el golpe). Con el overlay (F1) se ve
 la caja de golpe mientras está activa. Para probar el **empuje adicional del
 stick** (pregunta abierta del roadmap) basta con poner `strike_steer` a un valor
 positivo en `tuning.cfg` y guardar.

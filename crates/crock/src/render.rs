@@ -378,6 +378,7 @@ fn sprite_index(kind: StrikeKind) -> u32 {
         StrikeKind::Moss => 4,
         StrikeKind::Beetle => 5,
         StrikeKind::Bat => 6,
+        StrikeKind::Terrain => 1,
     }
 }
 
@@ -434,6 +435,55 @@ fn draw_objects(canvas: &mut WindowCanvas, world: &World, view: &View, gfx: &Gfx
     }
 }
 
+/// Avance de la animación del golpe, de 0 a 1.
+fn swing_progress(p: &Player) -> f32 {
+    let total = crock_sim::secs_to_ticks(crock_sim::SWING_SECS).max(1) as f32;
+    1.0 - p.swing as f32 / total
+}
+
+/// Estela de la porra: un arco que barre hasta la dirección del golpe.
+fn draw_swoosh(canvas: &mut WindowCanvas, p: &Player, c: (f32, f32), view: &View) {
+    let k = swing_progress(p);
+    if !(0.05..0.65).contains(&k) {
+        return;
+    }
+    let (dx, dy) = unit(p.strike_dir);
+    let end = dy.atan2(dx);
+    // Lateral: de detrás-arriba hacia delante; vertical: por delante.
+    let side = match p.strike_dir {
+        (x, _) if x != 0 => x as f32,
+        (_, y) if y > 0 => p.facing as f32,
+        _ => -p.facing as f32,
+    };
+    let sweep = 2.0;
+    let start = end - side * sweep;
+    // Cabeza del arco: llega al objetivo a mitad del golpe; la cola se apaga.
+    let head = ((k - 0.05) / 0.25).min(1.0);
+    let fade = 1.0 - ((k - 0.3) / 0.35).clamp(0.0, 1.0);
+    let px = 1.0 / crate::gfx::ART;
+    canvas.set_blend_mode(sdl3::render::BlendMode::Blend);
+    let steps = 22;
+    for i in 0..=steps {
+        let t = i as f32 / steps as f32;
+        if t > head {
+            break;
+        }
+        let a = start + (end - start) * t;
+        // Más ancha y opaca cerca de la cabeza.
+        let near = 1.0 - (head - t).min(1.0);
+        let alpha = (40.0 + 200.0 * near * near) * fade;
+        for (r, shade) in [(11.0, 1.0), (9.5, 0.7), (8.0, 0.4)] {
+            if shade < 0.6 && near < 0.5 {
+                continue;
+            }
+            let (x, y) = (c.0 + a.cos() * r, c.1 + a.sin() * r);
+            canvas.set_draw_color(Color::RGBA(255, 246, 220, (alpha * shade) as u8));
+            let _ = canvas.fill_rect(view.rect(x - px, y - px, 2.0 * px, 2.0 * px));
+        }
+    }
+    canvas.set_blend_mode(sdl3::render::BlendMode::None);
+}
+
 fn draw_player(
     canvas: &mut WindowCanvas,
     world: &World,
@@ -456,14 +506,23 @@ fn draw_player(
             flip = p.hanging < 0;
             cf::HANG
         } else if p.swing > 0 {
-            match p.strike_dir {
-                (_, y) if y < 0 => cf::STRIKE_UP,
-                (_, y) if y > 0 => cf::STRIKE_DOWN,
-                (x, _) => {
-                    // Golpe lateral: sale despedido al otro lado, mirando hacia
-                    // donde vuela, con la porra atrás (hacia lo golpeado).
-                    flip = x > 0;
-                    cf::STRIKE_SIDE
+            // Preparación muy corta (sólo visual: el golpe ya está activo),
+            // golpe y recogida de la porra.
+            let k = swing_progress(p);
+            let (sx, sy) = p.strike_dir;
+            if k >= 0.7 {
+                cf::STRIKE_END
+            } else {
+                let hit = (k >= 0.15) as u32;
+                match (sx, sy) {
+                    (_, y) if y < 0 && sx == 0 => cf::STRIKE_UP + hit,
+                    (_, y) if y > 0 && sx == 0 => cf::STRIKE_DOWN + hit,
+                    (x, _) => {
+                        // Lateral y diagonales: mirando al objetivo, porra
+                        // atrás y luego hacia delante.
+                        flip = x < 0;
+                        cf::STRIKE_SIDE + hit
+                    }
                 }
             }
         } else if !p.on_ground {
@@ -515,6 +574,10 @@ fn draw_player(
             let _ =
                 canvas.fill_rect(view.rect(cx + dir.0 * d - 1.0, cy + dir.1 * d - 1.0, 2.0, 2.0));
         }
+    }
+
+    if p.swing > 0 {
+        draw_swoosh(canvas, p, (cx, cy), view);
     }
 
     if p.max_strikes > 1 && p.hanging == 0 {

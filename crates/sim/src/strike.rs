@@ -22,6 +22,9 @@ pub enum StrikeKind {
     /// `w` Murciélago: vuela de lado a lado; tocarlo mata. Golpearlo lo
     /// derriba hasta el próximo reinicio y recarga el golpe.
     Bat,
+    /// Pared, suelo o techo: impulso normal, pero **no** recarga. No es un
+    /// objeto del mapa (sólo aparece en los eventos de golpe).
+    Terrain,
 }
 
 impl StrikeKind {
@@ -55,6 +58,7 @@ impl StrikeKind {
             Self::Moss => "moss",
             Self::Beetle => "beetle",
             Self::Bat => "bat",
+            Self::Terrain => "terrain",
         }
     }
 
@@ -70,19 +74,21 @@ impl StrikeKind {
             Self::Moss => (8, 6),
             Self::Beetle => (8, 6),
             Self::Bat => (8, 6),
+            Self::Terrain => (8, 8),
         }
     }
 
     pub fn impulse_mult(self, t: &Tuning) -> f32 {
         match self {
             Self::Rock | Self::Fragile | Self::Beetle | Self::Bat => 1.0,
+            Self::Terrain => t.terrain_mult,
             Self::Bone => t.bone_mult,
             Self::Moss => t.moss_mult,
         }
     }
 
     pub fn refills(self) -> bool {
-        !matches!(self, Self::Bone)
+        !matches!(self, Self::Bone | Self::Terrain)
     }
 
     pub fn is_enemy(self) -> bool {
@@ -263,6 +269,9 @@ pub enum SimEvent {
     Respawn,
 }
 
+/// Duración de la animación de la porra (s; sólo visual).
+pub const SWING_SECS: f32 = 0.22;
+
 /// Resultado de un impacto, para que el mundo aplique hit-stop y shake.
 pub(crate) struct Hit {
     pub dir: (i8, i8),
@@ -301,6 +310,7 @@ impl Player {
         t: &Tuning,
         pressed: bool,
         aim: (i8, i8),
+        map: &TileMap,
         objects: &mut [Strikeable],
         events: &mut Vec<SimEvent>,
     ) -> Option<Hit> {
@@ -323,7 +333,7 @@ impl Player {
                 self.strike_aim
             };
             self.strike_window = secs_to_ticks(t.strike_window).max(1);
-            self.swing = secs_to_ticks(0.12);
+            self.swing = secs_to_ticks(SWING_SECS);
         } else {
             self.strike_buffer = self.strike_buffer.saturating_sub(1);
         }
@@ -349,6 +359,21 @@ impl Player {
             }
         }
 
+        // Sin objetos a tiro: paredes, suelo y techo (caja más pequeña, para
+        // que sólo cuente lo que de verdad está pegado).
+        let terrain = best.is_none().then(|| self.terrain_hit(map, t)).flatten();
+        if let Some(at) = terrain {
+            self.apply_impulse(t, aim, StrikeKind::Terrain);
+            events.push(SimEvent::Strike {
+                at,
+                dir: self.strike_dir,
+                kind: StrikeKind::Terrain,
+            });
+            return Some(Hit {
+                dir: self.strike_dir,
+            });
+        }
+
         let Some((index, _)) = best else {
             self.strike_window -= 1;
             if self.strike_window == 0 {
@@ -361,28 +386,7 @@ impl Player {
         // --- Impacto ---------------------------------------------------------
         let dir = self.strike_dir;
         let o = &mut objects[index];
-        let speed = t.strike_speed * o.kind.impulse_mult(t);
-        let (ux, uy) = unit(dir);
-        // Sale despedido en la dirección opuesta al golpe.
-        self.vel = (-ux * speed, -uy * speed);
-        if t.strike_steer != 0.0 {
-            // Opción a evaluar: empuje adicional del stick en el impacto.
-            let (sx, sy) = unit(aim);
-            self.vel.0 += sx * t.strike_steer;
-            self.vel.1 += sy * t.strike_steer;
-        }
-        self.strike_window = 0;
-        // Tras un impacto se puede encadenar en cuanto acaba el `float`.
-        self.strike_cooldown = secs_to_ticks(t.strike_float);
-        self.float = secs_to_ticks(t.strike_float);
-        self.var_jump = 0;
-        self.coyote = 0;
-        self.on_ground = false;
-
-        self.strikes -= 1;
-        if o.kind.refills() {
-            self.strikes = self.max_strikes;
-        }
+        self.apply_impulse(t, aim, o.kind);
 
         let at = o.center;
         o.cooldown = secs_to_ticks(t.object_cooldown);
@@ -407,5 +411,50 @@ impl Player {
             _ => {}
         }
         Some(Hit { dir })
+    }
+
+    /// Impulso del impacto: sale despedido en la dirección opuesta al golpe.
+    fn apply_impulse(&mut self, t: &Tuning, aim: (i8, i8), kind: StrikeKind) {
+        let speed = t.strike_speed * kind.impulse_mult(t);
+        let (ux, uy) = unit(self.strike_dir);
+        self.vel = (-ux * speed, -uy * speed);
+        if t.strike_steer != 0.0 {
+            // Opción a evaluar: empuje adicional del stick en el impacto.
+            let (sx, sy) = unit(aim);
+            self.vel.0 += sx * t.strike_steer;
+            self.vel.1 += sy * t.strike_steer;
+        }
+        self.strike_window = 0;
+        // Tras un impacto se puede encadenar en cuanto acaba el `float`.
+        self.strike_cooldown = secs_to_ticks(t.strike_float);
+        self.float = secs_to_ticks(t.strike_float);
+        self.var_jump = 0;
+        self.coyote = 0;
+        self.on_ground = false;
+        self.strikes = self.strikes.saturating_sub(1);
+        if kind.refills() {
+            self.strikes = self.max_strikes;
+        }
+    }
+
+    /// Punto de impacto contra el terreno (sólidos), si la caja de golpe de
+    /// terreno toca alguno.
+    pub fn terrain_box(&self, dir: (i8, i8), t: &Tuning) -> (f32, f32, f32, f32) {
+        let (cx, cy) = self.center();
+        let (ux, uy) = unit(dir);
+        let (hx, hy) = (cx + ux * t.strike_reach, cy + uy * t.strike_reach);
+        let r = t.terrain_size / 2.0;
+        (hx - r, hy - r, hx + r, hy + r)
+    }
+
+    fn terrain_hit(&self, map: &TileMap, t: &Tuning) -> Option<(f32, f32)> {
+        if t.terrain_size <= 0.0 {
+            return None;
+        }
+        let (x0, y0, x1, y1) = self.terrain_box(self.strike_dir, t);
+        let (ix, iy) = (x0.floor() as i32, y0.floor() as i32);
+        let (w, h) = ((x1.ceil() as i32 - ix), (y1.ceil() as i32 - iy));
+        map.solid_in_rect(ix, iy, w, h)
+            .then_some(((x0 + x1) / 2.0, (y0 + y1) / 2.0))
     }
 }

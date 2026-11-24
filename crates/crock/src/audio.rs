@@ -155,7 +155,7 @@ impl Audio {
             }
             SimEvent::Strike { kind, .. } => self.play(
                 match kind {
-                    StrikeKind::Rock | StrikeKind::Fragile => Sfx::HitRock,
+                    StrikeKind::Rock | StrikeKind::Fragile | StrikeKind::Terrain => Sfx::HitRock,
                     StrikeKind::Bone => Sfx::HitBone,
                     StrikeKind::Moss => Sfx::HitMoss,
                     StrikeKind::Beetle | StrikeKind::Bat => Sfx::HitBug,

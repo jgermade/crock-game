@@ -32,6 +32,7 @@ pub fn kind_color(kind: StrikeKind) -> (u8, u8, u8) {
         StrikeKind::Moss => (110, 168, 84),
         StrikeKind::Beetle => (84, 128, 196),
         StrikeKind::Bat => (132, 96, 156),
+        StrikeKind::Terrain => (120, 110, 104),
     }
 }
 

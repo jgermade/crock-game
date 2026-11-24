@@ -58,6 +58,10 @@ pub struct Tuning {
     /// Multiplicadores de impulso por tipo de objeto.
     pub bone_mult: f32,
     pub moss_mult: f32,
+    /// Golpe contra paredes, suelo y techo: multiplicador de impulso y lado
+    /// de su caja (px; 0 = desactivado).
+    pub terrain_mult: f32,
+    pub terrain_size: f32,
     /// Hit-stop y temblor de pantalla en el impacto (s).
     pub hitstop: f32,
     pub shake_time: f32,
@@ -89,7 +93,7 @@ impl Default for Tuning {
             run_speed: 90.0,
             run_accel: 1000.0,
             run_reduce: 400.0,
-            air_mult: 0.65,
+            air_mult: 1.0,
             gravity: 900.0,
             max_fall: 160.0,
             fast_max_fall: 240.0,
@@ -112,6 +116,8 @@ impl Default for Tuning {
             fragile_respawn: 2.5,
             bone_mult: 1.35,
             moss_mult: 0.7,
+            terrain_mult: 1.0,
+            terrain_size: 8.0,
             hitstop: 0.05,
             shake_time: 0.12,
             beetle_speed: 20.0,
@@ -156,6 +162,8 @@ impl Tuning {
             "fragile_respawn" => &mut self.fragile_respawn,
             "bone_mult" => &mut self.bone_mult,
             "moss_mult" => &mut self.moss_mult,
+            "terrain_mult" => &mut self.terrain_mult,
+            "terrain_size" => &mut self.terrain_size,
             "hitstop" => &mut self.hitstop,
             "shake_time" => &mut self.shake_time,
             "beetle_speed" => &mut self.beetle_speed,

@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 pub use map::{Dir4, ObjectDef, TILE, Tile, TileMap, Zone, ZoneKind};
 pub use player::{Aabb, Player};
-pub use strike::{SimEvent, StrikeKind, Strikeable, unit};
+pub use strike::{SWING_SECS, SimEvent, StrikeKind, Strikeable, unit};
 pub use tuning::Tuning;
 
 /// Frecuencia de simulación (ticks por segundo).

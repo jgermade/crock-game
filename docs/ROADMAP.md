@@ -90,6 +90,9 @@ En lugar del doble salto, el personaje **golpea con la porra contra algo para im
 - [x] Capítulo 2, «Las corrientes» *(5 salas: corrientes de aire y colmillo de mamut = doble carga; comprobadas con el solver, también que sin la mecánica nueva no se pasan)*
 - [ ] Probar jugando: dificultad de «El nido» y «La gran corriente», fuerza de la corriente (`wind_rise`, `wind_accel`)
 - [ ] Más power-ups temporales por sala (sílex, pluma…)
+- [x] Golpe contra paredes, suelo y techo (impulso normal, no recarga); más control en el aire (`air_mult = 1`)
+- [x] Animación del golpe: preparación, golpe con estela y recogida *(con los frames de la hoja actual; pendiente: sprites nuevos de Crock en pixel art)*
+- [x] Salas comprobadas con margen humano (decisión cada 50 ms, cada una aguantando 50 ms de retraso)
 
 ## 6. Dependencias entre tareas
 

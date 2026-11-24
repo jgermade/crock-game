@@ -23,10 +23,13 @@ pub mod crock_frames {
     pub const RUN: (u32, u32) = (5, 12);
     pub const JUMP: u32 = 17;
     pub const FALL: (u32, u32) = (18, 2);
+    /// Golpes: dos celdas seguidas, preparación y golpe.
     pub const STRIKE_SIDE: u32 = 20;
-    pub const STRIKE_UP: u32 = 21;
-    pub const STRIKE_DOWN: u32 = 22;
-    pub const HANG: u32 = 24;
+    pub const STRIKE_UP: u32 = 22;
+    pub const STRIKE_DOWN: u32 = 24;
+    /// Recogida de la porra tras el golpe.
+    pub const STRIKE_END: u32 = 26;
+    pub const HANG: u32 = 28;
     /// Desplazamiento vertical (unidades) del frame de colgado para que el
     /// puño quede apoyado sobre el borde de la cornisa.
     pub const HANG_DROP: f32 = 4.1;

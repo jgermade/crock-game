@@ -177,3 +177,103 @@ fn room_property_loads_from_ascii_and_tiled() {
     assert_eq!(m.strikes, 2);
     assert!(TileMap::parse(";! dragones=2\n#P#\n###\n").is_err());
 }
+
+#[test]
+fn striking_the_floor_launches_up_without_refilling() {
+    let mut w = world(
+        "
+#####
+#...#
+#...#
+#...#
+#...#
+#...#
+#...#
+#...#
+#.P.#
+#####
+",
+    );
+    run(&mut w, SIM_HZ / 4, NONE);
+    let y0 = w.player.pos.1;
+    step(&mut w, &strike((0, 1)));
+    assert!(w.events.iter().any(|e| matches!(
+        e,
+        SimEvent::Strike {
+            kind: StrikeKind::Terrain,
+            ..
+        }
+    )));
+    assert!(w.player.vel.1 < -150.0, "sale hacia arriba");
+    assert_eq!(w.player.strikes, 0, "el terreno no recarga");
+    run(&mut w, SIM_HZ / 5, NONE);
+    assert!(w.player.pos.1 < y0 - 24, "más alto que un salto");
+}
+
+#[test]
+fn striking_a_wall_pushes_away_and_whiffs_in_open_air() {
+    let mut w = world(
+        "
+#########
+#.......#
+#.......#
+#.......#
+#.......#
+#P......#
+#########
+",
+    );
+    run(&mut w, SIM_HZ / 4, NONE);
+    // Saltar y golpear la pared de la izquierda: sale hacia la derecha.
+    step(
+        &mut w,
+        &Input {
+            jump_pressed: true,
+            jump_held: true,
+            ..NONE
+        },
+    );
+    run(
+        &mut w,
+        10,
+        Input {
+            jump_held: true,
+            ..NONE
+        },
+    );
+    step(&mut w, &strike((-1, 0)));
+    assert!(w.player.vel.0 > 150.0, "{:?}", w.player.vel);
+    // En el aire, lejos de todo: golpe al aire.
+    let mut w = world(
+        "
+#########
+#.......#
+#.......#
+#.......#
+#.......#
+#...P...#
+#########
+",
+    );
+    run(&mut w, SIM_HZ / 4, NONE);
+    step(
+        &mut w,
+        &Input {
+            jump_pressed: true,
+            jump_held: true,
+            ..NONE
+        },
+    );
+    run(
+        &mut w,
+        12,
+        Input {
+            jump_held: true,
+            ..NONE
+        },
+    );
+    w.events.clear();
+    step(&mut w, &strike((1, 0)));
+    run(&mut w, SIM_HZ / 5, NONE);
+    assert!(w.events.iter().any(|e| matches!(e, SimEvent::Whiff)));
+}
