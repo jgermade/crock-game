@@ -9,6 +9,9 @@
 //! cargo run --release -p crock-solver -- assets/levels/c1-01-entrada.tmj \
 //!     [--out=ruta.rep] [--beam=600] [--secs=20] [--tuning=assets/tuning.cfg]
 //! ```
+//!
+//! Con `--trace=ruta.rep` no busca: reproduce la ruta y lista lo que pasa
+//! (golpes, agarres, colmillo...), para ver si usa la mecánica prevista.
 
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
@@ -158,7 +161,10 @@ fn score(w: &World, field: &[f32]) -> f32 {
     };
     // Menos distancia es mejor; estar de pie y con el golpe cargado son
     // estados más "estables" desde los que se puede intentar de todo.
-    d - w.player.strikes as f32 * 0.5 - if w.player.on_ground { 0.5 } else { 0.0 }
+    // El colmillo (doble carga) vale bastante: la sala suele pedirlo.
+    d - w.player.strikes as f32 * 0.5
+        - if w.player.on_ground { 0.5 } else { 0.0 }
+        - w.bonus_strikes as f32 * 8.0
 }
 
 /// Estado discretizado para la lista de visitados y la deduplicación.
@@ -176,6 +182,7 @@ fn key(w: &World) -> Key {
             | (((o.cooldown > 0) as u64) << 3);
         objs |= bits << (i * 4);
     }
+    objs ^= (w.bonus_strikes as u64) << 63;
     // Los enemigos se mueven: su posición aproximada también cuenta (esperar
     // a que un bicho pase es una jugada distinta).
     for o in w.objects.iter().filter(|o| o.hostile()) {
@@ -224,6 +231,7 @@ fn main() {
     let mut beam = 600usize;
     let mut secs = 20.0f32;
     let mut tuning_path = None;
+    let mut trace_path = None;
     for a in std::env::args().skip(1) {
         let (k, v) = a.split_once('=').unwrap_or((a.as_str(), ""));
         match k {
@@ -231,6 +239,7 @@ fn main() {
             "--beam" => beam = v.parse().expect("--beam=N"),
             "--secs" => secs = v.parse().expect("--secs=S"),
             "--tuning" => tuning_path = Some(v.to_string()),
+            "--trace" => trace_path = Some(v.to_string()),
             _ if !a.starts_with("--") => map_path = Some(a.clone()),
             _ => panic!("argumento desconocido: {a}"),
         }
@@ -249,6 +258,10 @@ fn main() {
     if !map.zones.iter().any(|z| z.kind == ZoneKind::Exit) {
         eprintln!("la sala no tiene salida");
         std::process::exit(2);
+    }
+    if let Some(p) = trace_path {
+        trace(map, tuning, &p);
+        return;
     }
     let field = distance_field(&map);
     let name = map.name.clone();
@@ -429,4 +442,42 @@ fn main() {
     }
     println!("{name}: no encontrada en {secs} s de juego");
     std::process::exit(1);
+}
+
+/// Reproduce una ruta e imprime sus eventos relevantes, con el tiempo y la
+/// celda del jugador.
+fn trace(map: TileMap, tuning: Tuning, path: &str) {
+    let src = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{path}: {e}"));
+    let inputs = replay::decode(&src).unwrap_or_else(|e| panic!("{path}: {e}"));
+    let mut w = World::new(map, tuning);
+    w.events.clear();
+    for (i, inp) in inputs.iter().enumerate() {
+        step(&mut w, inp);
+        let p = &w.player;
+        let cell = (
+            (p.pos.0 + 4).div_euclid(TILE),
+            (p.pos.1 + 10).div_euclid(TILE),
+        );
+        let t = i as f32 / SIM_HZ as f32;
+        if std::env::var_os("SOLVER_DEBUG").is_some() && i % 24 == 0 {
+            println!(
+                "{t:6.2}s  celda {cell:?}  vel ({:.0},{:.0}) golpes {}",
+                p.vel.0, p.vel.1, p.strikes
+            );
+        }
+        for e in w.events.drain(..) {
+            let what = match e {
+                SimEvent::Strike { kind, dir, .. } => format!("golpe {kind:?} {dir:?}"),
+                SimEvent::Grab { .. } => "agarre".into(),
+                SimEvent::Pickup { .. } => "colmillo".into(),
+                SimEvent::Burn { .. } => "quemado".into(),
+                SimEvent::Death { .. } => "MUERE".into(),
+                SimEvent::Whiff => "golpe al aire".into(),
+                SimEvent::EnemyDown { kind, .. } => format!("derriba {kind:?}"),
+                SimEvent::RoomEnter { .. } | SimEvent::ChapterComplete => "salida".into(),
+                _ => continue,
+            };
+            println!("{t:6.2}s  celda {cell:?}  {what}");
+        }
+    }
 }

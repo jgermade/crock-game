@@ -86,6 +86,11 @@ En lugar del doble salto, el personaje **golpea con la porra contra algo para im
 - [ ] Ajuste fino de latencia en hardware real (144 Hz+, VRR) *(las herramientas están: overlay F1, modos de sincronía, límite de fps, retardo F4; falta medir en máquinas reales)*
 - [ ] Steam / Steam Deck (si se decide publicar)
 
+### Fase 5 — Más contenido
+- [x] Capítulo 2, «Las corrientes» *(5 salas: corrientes de aire y colmillo de mamut = doble carga; comprobadas con el solver, también que sin la mecánica nueva no se pasan)*
+- [ ] Probar jugando: dificultad de «El nido» y «La gran corriente», fuerza de la corriente (`wind_rise`, `wind_accel`)
+- [ ] Más power-ups temporales por sala (sílex, pluma…)
+
 ## 6. Dependencias entre tareas
 
 ```mermaid
@@ -122,4 +127,4 @@ gantt
 - ¿8 direcciones o analógico 360°?
 - ¿Objetivo de refresco/hardware concreto (144 Hz+, handheld, Steam Deck)?
 - ¿Se publica en Steam?
-- ¿Power-ups? Propuesta: pocos, temporales y propios de cada sala (porra de mamut, sílex que prende la porra, pluma para planear…); como única mejora permanente, la doble carga de golpe.
+- ¿Power-ups? Propuesta: pocos, temporales y propios de cada sala (porra de mamut, sílex que prende la porra, pluma para planear…); como única mejora permanente, la doble carga de golpe. *Hecho: la doble carga (colmillo) dura el capítulo 2; queda decidir si se arrastra a capítulos posteriores.*

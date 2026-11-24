@@ -76,6 +76,11 @@ pub struct Tuning {
     pub ledge_rise: f32,
     /// Tiempo tras soltarse o saltar antes de poder volver a agarrarse (s).
     pub ledge_regrab: f32,
+
+    /// Corriente de aire: velocidad de subida máxima (px/s) y aceleración
+    /// hacia ella (px/s²).
+    pub wind_rise: f32,
+    pub wind_accel: f32,
 }
 
 impl Default for Tuning {
@@ -116,6 +121,8 @@ impl Default for Tuning {
             ledge_reach: 6.0,
             ledge_rise: 30.0,
             ledge_regrab: 0.25,
+            wind_rise: 100.0,
+            wind_accel: 1100.0,
         }
     }
 }
@@ -158,6 +165,8 @@ impl Tuning {
             "ledge_reach" => &mut self.ledge_reach,
             "ledge_rise" => &mut self.ledge_rise,
             "ledge_regrab" => &mut self.ledge_regrab,
+            "wind_rise" => &mut self.wind_rise,
+            "wind_accel" => &mut self.wind_accel,
             _ => return None,
         })
     }

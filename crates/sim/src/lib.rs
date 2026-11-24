@@ -65,6 +65,9 @@ pub struct World {
     pub tick: u64,
     /// Muertes acumuladas (en todo el capítulo).
     pub deaths: u32,
+    /// Golpes extra por recarga ganados en el capítulo (colmillo de mamut).
+    /// Sobreviven a las muertes y a los cambios de sala.
+    pub bonus_strikes: u8,
     /// Ticks restantes de hit-stop (la simulación del jugador se congela).
     pub hitstop: u32,
     /// Ticks restantes de temblor de pantalla y su dirección.
@@ -94,6 +97,7 @@ impl World {
             objects: Vec::new(),
             tick: 0,
             deaths: 0,
+            bonus_strikes: 0,
             hitstop: 0,
             shake: 0,
             shake_dir: (0, 0),
@@ -115,10 +119,24 @@ impl World {
     /// inicial, sin transición.
     pub fn restart(&mut self) {
         self.player = Player::spawn(self.map.spawn);
+        self.player.max_strikes = self.max_strikes();
+        self.player.strikes = self.player.max_strikes;
         self.objects = self.map.objects.iter().map(Strikeable::from_def).collect();
         self.hitstop = 0;
         self.shake = 0;
         self.events.push(SimEvent::Respawn);
+    }
+
+    /// Golpes por recarga ahora mismo: los de las constantes más el colmillo,
+    /// o los que la sala da por supuestos si son más.
+    pub fn max_strikes(&self) -> u8 {
+        let base = (self.tuning.max_strikes.max(0.0) as u8).saturating_add(self.bonus_strikes);
+        base.max(self.map.strikes)
+    }
+
+    /// ¿Hay un colmillo en la sala que aún no se ha cogido?
+    pub fn tusk_available(&self) -> bool {
+        self.bonus_strikes == 0
     }
 
     /// Muerte: se cuenta, se avisa y se reinicia la sala en el mismo tick.
@@ -147,6 +165,7 @@ impl World {
         mix(p.vel.0.to_bits() as u64);
         mix(p.vel.1.to_bits() as u64);
         mix(p.strikes as u64);
+        mix(self.bonus_strikes as u64);
         for o in &self.objects {
             mix(o.cooldown as u64 | (o.broken as u64) << 32);
             mix(o.center.0.to_bits() as u64 | (o.center.1.to_bits() as u64) << 32);
@@ -175,6 +194,15 @@ pub fn step(world: &mut World, input: &Input) {
 
     for o in &mut world.objects {
         o.behave(&world.map, &world.tuning);
+    }
+
+    // Lo que el jugador necesita saber del mundo antes de moverse.
+    world.player.max_strikes = world.max_strikes();
+    {
+        let p = &world.player;
+        world.player.in_wind = world.map.zones.iter().any(|z| {
+            z.kind == ZoneKind::Wind && z.overlaps(p.pos.0, p.pos.1, Player::W, Player::H)
+        });
     }
 
     let t = &world.tuning;
@@ -213,13 +241,27 @@ pub fn step(world: &mut World, input: &Input) {
     // Zonas.
     let mut in_fire = false;
     let mut at_exit = false;
+    let mut tusk = None;
     for z in &world.map.zones {
         if z.overlaps(x, y, w, h) {
             match z.kind {
                 ZoneKind::Fire => in_fire = true,
                 ZoneKind::Exit => at_exit = true,
+                ZoneKind::Wind => {}
+                ZoneKind::Tusk => tusk = Some(z),
             }
         }
+    }
+    if let Some(z) = tusk
+        && world.tusk_available()
+    {
+        world.bonus_strikes += 1;
+        world.player.max_strikes = world.max_strikes();
+        if !in_fire {
+            world.player.strikes = world.player.max_strikes;
+        }
+        let at = ((z.x + z.w / 2) as f32, (z.y + z.h / 2) as f32);
+        world.events.push(SimEvent::Pickup { at });
     }
     world.player.set_burning(in_fire, &mut world.events);
 
@@ -235,6 +277,8 @@ pub fn step(world: &mut World, input: &Input) {
 mod test_util;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_ch2;
 #[cfg(test)]
 mod tests_ledge;
 #[cfg(test)]

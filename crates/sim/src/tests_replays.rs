@@ -11,14 +11,30 @@ fn assets() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
 }
 
+/// Salas de todos los capítulos (`levels/capitulo*.txt`) y las de pruebas
+/// con salida.
 fn rooms() -> Vec<String> {
-    let list = std::fs::read_to_string(assets().join("levels/capitulo1.txt")).unwrap();
-    let mut v: Vec<String> = list
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .map(|l| l.trim_end_matches(".tmj").to_string())
+    let mut lists: Vec<_> = std::fs::read_dir(assets().join("levels"))
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.extension().is_some_and(|e| e == "txt")
+                && p.file_name()
+                    .is_some_and(|n| n.to_string_lossy().starts_with("capitulo"))
+        })
         .collect();
+    lists.sort();
+    assert!(lists.len() >= 2, "faltan capítulos: {lists:?}");
+    let mut v: Vec<String> = Vec::new();
+    for list in lists {
+        let src = std::fs::read_to_string(list).unwrap();
+        v.extend(
+            src.lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                .map(|l| l.trim_end_matches(".tmj").to_string()),
+        );
+    }
     v.push("golpe".into());
     v.push("cornisas".into());
     v

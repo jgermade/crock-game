@@ -24,7 +24,46 @@ TOP_VARIANTS = (1, 14)
 DARK_VARIANTS = (2, 13)
 SPIKES = {"^": 3, "v": 4, "<": 5, ">": 6}
 STALACTITE, TUFT, PEBBLES = 7, 8, 9
-OBJECTS = {"P": 0, "o": 1, "x": 2, "b": 3, "m": 4, "e": 5, "w": 6, "f": 7, "E": 8}
+OBJECTS = {"P": 0, "o": 1, "x": 2, "b": 3, "m": 4, "e": 5, "w": 6, "f": 7, "E": 8, "t": 10}
+WIND = "u"  # corrientes: se juntan en rectángulos de clase `wind`
+
+
+def props(src):
+    """Propiedades de la sala en líneas `;! clave=valor` (enteros)."""
+    out = {}
+    for line in src.splitlines():
+        if line.startswith(";!"):
+            for kv in line[2:].split():
+                k, v = kv.split("=", 1)
+                out[k] = int(v)
+    return out
+
+
+def rects(rows, ch):
+    """Junta las celdas `ch` en rectángulos (tramos horizontales que se
+    alargan hacia abajo mientras la fila de debajo tenga el mismo tramo)."""
+    h, w = len(rows), len(rows[0])
+    runs = []
+    for y in range(h):
+        x = 0
+        while x < w:
+            if rows[y][x] == ch:
+                x0 = x
+                while x < w and rows[y][x] == ch:
+                    x += 1
+                runs.append((y, x0, x))
+            else:
+                x += 1
+    out, used = [], set()
+    for y, x0, x1 in runs:
+        if (y, x0, x1) in used:
+            continue
+        y1 = y + 1
+        while (y1, x0, x1) in runs:
+            used.add((y1, x0, x1))
+            y1 += 1
+        out.append((x0, y, x1 - x0, y1 - y))
+    return out
 
 
 def parse(src):
@@ -95,7 +134,7 @@ def wall_rocks(rows, solid, hashed):
     return out
 
 
-def convert(rows, name):
+def convert(rows, name, extra=None):
     h, w = len(rows), len(rows[0])
 
     def solid(x, y):
@@ -131,7 +170,7 @@ def convert(rows, name):
             else:
                 if c in OBJECTS:
                     objects.append((c, x, y))
-                elif c not in ". ":
+                elif c not in ". " + WIND:
                     raise SystemExit(f"carácter desconocido '{c}' en ({x},{y})")
                 # Decoración en huecos vacíos.
                 if c == "." and y > 0 and solid(x, y - 1) and y + 1 < h and rows[y + 1][x] == "." and hashed(x, y) < 22:
@@ -157,6 +196,25 @@ def convert(rows, name):
                 "visible": True,
             }
         )
+
+    for x, y, rw, rh in rects(rows, WIND):
+        objs.append(
+            {
+                "id": len(objs) + 1,
+                "name": "",
+                "type": "wind",
+                "x": x * TS,
+                "y": y * TS,
+                "width": rw * TS,
+                "height": rh * TS,
+                "rotation": 0,
+                "visible": True,
+            }
+        )
+
+    map_props = [{"name": "name", "type": "string", "value": name}]
+    for k, v in sorted((extra or {}).items()):
+        map_props.append({"name": k, "type": "int", "value": v})
 
     def layer(lid, lname, data):
         return {
@@ -186,7 +244,7 @@ def convert(rows, name):
         "compressionlevel": -1,
         "nextlayerid": 5,
         "nextobjectid": len(objs) + 1,
-        "properties": [{"name": "name", "type": "string", "value": name}],
+        "properties": map_props,
         "tilesets": [
             {"firstgid": CUEVA_FIRST, "source": "cueva.tsj"},
             {"firstgid": OBJ_FIRST, "source": "objetos.tsj"},
@@ -232,7 +290,7 @@ def main():
     src = open(sys.argv[1]).read()
     name = sys.argv[3] if len(sys.argv) > 3 else sys.argv[2].rsplit("/", 1)[-1].removesuffix(".tmj")
     with open(sys.argv[2], "w", encoding="utf-8") as f:
-        f.write(dump(convert(parse(src), name)))
+        f.write(dump(convert(parse(src), name, props(src))))
 
 
 if __name__ == "__main__":

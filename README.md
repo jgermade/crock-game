@@ -3,7 +3,7 @@
 Platformer 2D de precisión: Crock, un cavernícola melenudo con una porra que,
 en lugar de doble salto, **golpea objetos para impulsarse**. Ver [docs/ROADMAP.md](docs/ROADMAP.md).
 
-Estado: Fases 0–3 hechas (capítulo 1 jugable). **Fase 4**: audio de baja latencia, menús (título, pausa, opciones) y opciones de pantalla y mando guardadas; falta el ajuste en hardware real y decidir lo de Steam.
+Estado: Fases 0–4 hechas salvo el ajuste en hardware real y lo de Steam. **Capítulo 2** jugable: corrientes de aire y el colmillo de mamut (doble carga de golpe).
 
 ![Pixel art de cROCK](docs/arte.png)
 
@@ -116,6 +116,19 @@ positivo en `tuning.cfg` y guardar.
 Morir (pinchos, enemigos, caer al vacío) reinicia la sala al instante; el HUD
 cuenta las muertes del capítulo. Los pinchos sólo matan si te mueves contra
 ellos. Cómo hacer salas nuevas: [docs/NIVELES.md](docs/NIVELES.md).
+
+## Capítulo 2: Las corrientes
+
+| Sala | Introduce |
+|---|---|
+| 1. El colmillo | El **colmillo de mamut**: doble carga de golpe para el resto del capítulo (sobrevive a las muertes). Dos huesos seguidos sobre el foso. |
+| 2. Corrientes | **Corrientes de aire**: empujan hacia arriba; manteniendo abajo se cae igual. Saltar de corriente en corriente sobre pinchos. |
+| 3. Viento y hueso | Una corriente que acaba en fuego: salir, recargar en la repisa y subir con huesos. |
+| 4. El nido | Murciélagos sobre las corrientes. |
+| 5. La gran corriente | Todo junto, en vertical: escarabajo, murciélago, hueso, roca frágil y rocas. |
+
+Con doble carga, unos puntos sobre la cabeza de Crock indican los golpes que
+le quedan.
 
 ## Menús, opciones y audio (Fase 4)
 

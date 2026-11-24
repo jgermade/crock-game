@@ -168,6 +168,21 @@ impl Fx {
                     );
                 }
             }
+            SimEvent::Pickup { at } => {
+                // Destello de marfil.
+                self.burst(
+                    at,
+                    (0.0, -1.0),
+                    20,
+                    BurstSpec {
+                        speed: 70.0,
+                        spread: 6.3,
+                        life: 0.6,
+                        gravity: 40.0,
+                        color: (250, 238, 200),
+                    },
+                );
+            }
             SimEvent::Respawn | SimEvent::RoomEnter { .. } => self.clear(),
             SimEvent::Whiff
             | SimEvent::ChapterComplete

@@ -26,6 +26,12 @@ pub enum ZoneKind {
     Fire,
     /// Salida de la sala: pasa a la siguiente.
     Exit,
+    /// Corriente de aire ascendente: empuja hacia arriba en lugar de la
+    /// gravedad (manteniendo abajo se cae igual).
+    Wind,
+    /// Colmillo de mamut: al cogerlo, doble carga de golpe para el resto
+    /// del capítulo.
+    Tusk,
 }
 
 /// Rectángulo de efecto en píxeles.
@@ -76,7 +82,9 @@ impl ObjectDef {
 /// - `P` punto de aparición del jugador (sus pies, centrados en la celda)
 /// - `o` roca, `x` roca frágil, `b` hueso colgante, `m` musgo (golpeables)
 /// - `e` escarabajo, `w` murciélago (enemigos golpeables)
-/// - `f` fuego, `E` salida (zonas de una celda)
+/// - `f` fuego, `E` salida, `u` corriente de aire, `t` colmillo (zonas de
+///   una celda)
+/// - Línea `;! strikes=N`: golpes por recarga en la sala (como mínimo).
 #[derive(Clone, Debug)]
 pub struct TileMap {
     pub name: String,
@@ -87,6 +95,9 @@ pub struct TileMap {
     pub spawn: (i32, i32),
     pub objects: Vec<ObjectDef>,
     pub zones: Vec<Zone>,
+    /// Golpes por recarga que se dan por supuestos en esta sala (p. ej. si
+    /// el colmillo se coge antes en el capítulo). 0 = los de `tuning`.
+    pub strikes: u8,
     /// Capas visuales (sólo para dibujar): índice+1 del tile en el tileset
     /// `cueva`, 0 = vacío. De abajo arriba.
     pub gfx: Vec<Vec<u16>>,
@@ -114,6 +125,7 @@ impl TileMap {
             spawn: (0, 0),
             objects: Vec::new(),
             zones: Vec::new(),
+            strikes: 0,
             gfx: Vec::new(),
         }
     }
@@ -162,6 +174,17 @@ impl TileMap {
     }
 
     pub fn parse(src: &str) -> Result<Self, String> {
+        let mut strikes = 0;
+        for l in src.lines().filter_map(|l| l.trim().strip_prefix(";!")) {
+            for kv in l.split_whitespace() {
+                match kv.split_once('=') {
+                    Some(("strikes", v)) => {
+                        strikes = v.parse().map_err(|_| format!("strikes inválido: {v}"))?
+                    }
+                    _ => return Err(format!("propiedad desconocida '{kv}'")),
+                }
+            }
+        }
         let rows: Vec<&str> = src
             .lines()
             .map(|l| l.trim_end_matches('\r'))
@@ -172,6 +195,7 @@ impl TileMap {
         }
         let w = rows.iter().map(|r| r.chars().count()).max().unwrap() as i32;
         let mut m = Self::new("ascii", w, rows.len() as i32);
+        m.strikes = strikes;
         let mut spawn = None;
         for (ty, row) in rows.iter().enumerate() {
             for (tx, c) in row.chars().enumerate() {
@@ -194,6 +218,8 @@ impl TileMap {
                     'P' => spawn = Some((tx * TILE + TILE / 2, (ty + 1) * TILE)),
                     'f' => m.zones.push(zone(ZoneKind::Fire)),
                     'E' => m.zones.push(zone(ZoneKind::Exit)),
+                    'u' => m.zones.push(zone(ZoneKind::Wind)),
+                    't' => m.zones.push(zone(ZoneKind::Tusk)),
                     c => match StrikeKind::from_char(c) {
                         Some(kind) => m.objects.push(ObjectDef::new(kind, cell_center)),
                         None => return Err(format!("carácter desconocido '{c}' en ({tx},{ty})")),

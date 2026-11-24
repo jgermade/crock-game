@@ -9,8 +9,11 @@
 //!   `spike_up`, `spike_down`, `spike_left`, `spike_right`. Sin `kind`: sólido.
 //!   Las capas cuyo nombre empieza por `deco` son sólo decorativas.
 //! - Capa de objetos con objetos cuyo tipo/clase es `spawn`, `rock`,
-//!   `fragile`, `bone`, `moss`, `beetle`, `bat`, `fire` o `exit`.
+//!   `fragile`, `bone`, `moss`, `beetle`, `bat`, `fire`, `exit`, `wind` o
+//!   `tusk`.
 //!   Propiedades opcionales: `range` (tiles, enemigos) y `dir` (-1 o 1).
+//! - Propiedades del mapa: `name` (texto) y `strikes` (entero, golpes por
+//!   recarga que la sala da por supuestos).
 
 use serde::Deserialize;
 use serde_json::Value;
@@ -190,7 +193,7 @@ pub fn load_map(
                 .and_then(Value::as_str)
                 .unwrap_or(&t.class);
             let lower = kind.to_lowercase();
-            let is_object = matches!(lower.as_str(), "spawn" | "fire" | "exit")
+            let is_object = matches!(lower.as_str(), "spawn" | "fire" | "exit" | "wind" | "tusk")
                 || StrikeKind::from_name(&lower).is_some();
             let tile = if is_object {
                 // Tile de un tileset de objetos: no colisiona si se pinta.
@@ -232,6 +235,10 @@ pub fn load_map(
         .and_then(Value::as_str)
         .unwrap_or(name);
     let mut m = TileMap::new(map_name, raw.width, raw.height);
+    m.strikes = prop(&raw.properties, "strikes")
+        .and_then(Value::as_u64)
+        .unwrap_or(0)
+        .min(9) as u8;
     let mut spawn = None;
 
     // Aplanar grupos de capas.
@@ -308,11 +315,12 @@ pub fn load_map(
                         "spawn" => {
                             spawn = Some(((x + w / 2.0).round() as i32, (y + h).round() as i32))
                         }
-                        "fire" | "exit" => m.zones.push(Zone {
-                            kind: if kind == "fire" {
-                                ZoneKind::Fire
-                            } else {
-                                ZoneKind::Exit
+                        "fire" | "exit" | "wind" | "tusk" => m.zones.push(Zone {
+                            kind: match kind.as_str() {
+                                "fire" => ZoneKind::Fire,
+                                "exit" => ZoneKind::Exit,
+                                "wind" => ZoneKind::Wind,
+                                _ => ZoneKind::Tusk,
                             },
                             x: x.round() as i32,
                             y: y.round() as i32,

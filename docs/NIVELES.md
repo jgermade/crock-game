@@ -12,6 +12,9 @@ una sala se pasa a la siguiente.
   guardadas en **CSV** (Mapa → Propiedades → Formato de capa de tiles).
 - Tilesets externos: `cueva.tsj` (terreno) y `objetos.tsj` (objetos).
 - Propiedad de mapa `name` (texto): nombre que se ve en el HUD.
+- Propiedad de mapa `strikes` (entero, opcional): golpes por recarga que la
+  sala da por supuestos. Las salas que vienen después del colmillo llevan
+  `strikes = 2`, para que se puedan jugar (y resolver) sueltas.
 
 ### Capas de tiles (tileset `cueva`)
 
@@ -40,6 +43,8 @@ clase escrita a mano.
 | `bat` | Murciélago: vaivén horizontal; golpearlo lo derriba. | `range` (tiles, 3), `dir` |
 | `fire` | Zona de fuego: quema la porra (sin golpes dentro). Redimensionable. | |
 | `exit` | Salida de la sala. Redimensionable. | |
+| `wind` | Corriente de aire ascendente. Redimensionable. | |
+| `tusk` | Colmillo de mamut: +1 golpe por recarga hasta el final del capítulo. | |
 
 ## Comprobar que una sala se puede pasar
 
@@ -53,11 +58,17 @@ El solver es una búsqueda en haz sobre la simulación: encuentra *una* ruta
 `tuning.cfg`. Si dice «sin salida» o «no encontrada», la sala probablemente no
 se puede pasar; prueba con `--beam=2000 --secs=40` antes de rediseñarla.
 
+Para ver qué hace una ruta (golpes, agarres, colmillo…) y comprobar que usa
+la mecánica prevista: `crock-solver sala.tmj --trace=ruta.rep` (con
+`SOLVER_DEBUG=1`, también la posición cada 0,1 s). Un buen control de una sala
+es quitarle la mecánica nueva y ver que el solver ya **no** encuentra ruta.
+
 Las rutas de `assets/replays/` se comprueban en los tests: tras editar una sala
 o cambiar constantes, regenéralas con:
 
 ```bash
-tools/solve_all.sh
+tools/solve_all.sh                          # todas
+tools/solve_all.sh c2-01-el-colmillo.tmj    # sólo esa
 ```
 
 ## Bocetos ASCII (la fuente de las salas incluidas)
@@ -71,8 +82,10 @@ de grosor (para las rocas grandes); el espacio de juego no cambia.
 ## Prototipar en ASCII
 
 `tools/ascii2tmj.py` convierte una sala en texto (mismos caracteres que los
-tests: `#`, `^ v < >`, `P`, `o x b m e w`, `f`, `E`) a `.tmj` con autotiling y
-decoración (matas, estalactitas y una capa `deco_rocas` con rocas grandes
+tests: `#`, `^ v < >`, `P`, `o x b m e w`, `f`, `E`, `u` corriente, `t`
+colmillo) a `.tmj` con autotiling y
+una línea `;! strikes=2` para las propiedades de la sala; las celdas `u`
+contiguas se juntan en rectángulos `wind`) y decoración (matas, estalactitas y una capa `deco_rocas` con rocas grandes
 sobre las caras de las paredes). Útil para bocetar rápido; después el `.tmj`
 es la fuente. En Tiled, las rocas son piezas de varios tiles del tileset
 `cueva` (2×2, 1×3, 1×2 y 1×1): se pintan en una capa cuyo nombre empiece por

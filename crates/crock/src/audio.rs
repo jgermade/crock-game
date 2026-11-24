@@ -32,6 +32,7 @@ pub enum Sfx {
     Death,
     Room,
     Complete,
+    Pickup,
     MenuMove,
     MenuSelect,
 }
@@ -169,6 +170,7 @@ impl Audio {
             SimEvent::Death { .. } => self.play(Sfx::Death, 0.8),
             SimEvent::RoomEnter { .. } => self.play(Sfx::Room, 0.6),
             SimEvent::ChapterComplete => self.play(Sfx::Complete, 0.7),
+            SimEvent::Pickup { .. } => self.play(Sfx::Pickup, 0.7),
             _ => {}
         }
     }
@@ -292,6 +294,14 @@ fn bank() -> Vec<Arc<[f32]>> {
         (&sweep(0.15, 659.0, 659.0, 0.3, 2.0), 0.4, len(0.12)),
         (&sweep(0.15, 784.0, 784.0, 0.3, 2.0), 0.4, len(0.24)),
         (&sweep(0.4, 1046.0, 1046.0, 0.3, 1.5), 0.4, len(0.36)),
+    ]);
+    // Colmillo: arpegio ascendente rápido con un golpe grave debajo.
+    b[Sfx::Pickup as usize] = mix(&[
+        (&thud, 0.5, 0),
+        (&sweep(0.08, 392.0, 392.0, 0.4, 2.0), 0.35, 0),
+        (&sweep(0.08, 523.0, 523.0, 0.4, 2.0), 0.35, len(0.06)),
+        (&sweep(0.08, 659.0, 659.0, 0.4, 2.0), 0.35, len(0.12)),
+        (&sweep(0.3, 784.0, 800.0, 0.3, 1.5), 0.4, len(0.18)),
     ]);
     b[Sfx::MenuMove as usize] = sweep(0.03, 660.0, 660.0, 0.5, 2.0);
     b[Sfx::MenuSelect as usize] = sweep(0.08, 660.0, 990.0, 0.5, 1.5);

@@ -50,6 +50,10 @@ pub struct Player {
     pub strike_aim: (i8, i8),
     /// Dentro de fuego: la porra arde y no hay golpes.
     pub burning: bool,
+    /// Dentro de una corriente de aire (lo fija el mundo antes de cada tick).
+    pub in_wind: bool,
+    /// Golpes por recarga (lo fija el mundo: constantes, sala y colmillo).
+    pub max_strikes: u8,
     /// Colgado de una cornisa: lado de la pared (-1 o 1), 0 si no.
     pub hanging: i8,
     /// Ticks hasta poder volver a agarrarse (tras soltarse o saltar).
@@ -86,6 +90,8 @@ impl Player {
             strike_buffer: 0,
             strike_aim: (0, 0),
             burning: false,
+            in_wind: false,
+            max_strikes: 1,
             hanging: 0,
             regrab: 0,
             force_rise: 0,
@@ -175,7 +181,7 @@ impl Player {
             self.jump_buffer = self.jump_buffer.saturating_sub(1);
         }
         if self.on_ground && self.float == 0 && self.strike_window == 0 && !self.burning {
-            self.strikes = t.max_strikes as u8;
+            self.strikes = self.max_strikes;
         }
 
         // --- Golpe con la porra -------------------------------------------
@@ -242,7 +248,11 @@ impl Player {
         } else {
             t.max_fall
         };
-        if !self.on_ground {
+        if self.in_wind && input.y <= 0 {
+            // Corriente: empuja hacia arriba hasta `wind_rise`.
+            self.vel.1 = approach(self.vel.1, -t.wind_rise, t.wind_accel * DT);
+            self.on_ground = false;
+        } else if !self.on_ground {
             let near_apex = self.vel.1.abs() < t.half_grav_threshold;
             let g = if near_apex && input.jump_held {
                 t.gravity * 0.5
@@ -326,7 +336,7 @@ impl Player {
             self.facing = d;
             // Agarrarse recarga el golpe (salvo con la porra ardiendo).
             if !self.burning {
-                self.strikes = t.max_strikes as u8;
+                self.strikes = self.max_strikes;
             }
             events.push(SimEvent::Grab { at: self.center() });
             return;

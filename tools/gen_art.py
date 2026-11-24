@@ -99,6 +99,9 @@ PALETTE = {
     "w": (128, 86, 46),
     "x": (176, 124, 72),
     "X": (210, 164, 106),
+    # corriente de aire
+    "v": (196, 220, 240),
+    "V": (132, 164, 204),
     # salida
     "z": (250, 234, 160),
     "Z": (206, 178, 96),
@@ -557,6 +560,41 @@ def exit_arrow():
     return c
 
 
+def wind():
+    """Corriente de aire (icono para el editor; en el juego se anima)."""
+    c = Canvas(T, T)
+    for cx, cy in ((4, 9), (11, 4)):
+        for y in range(T):
+            for x in range(T):
+                dx, dy = u(x) - cx, u(y) - cy
+                head = 0 <= dy <= 3 and abs(dx) <= dy * 0.9
+                shaft = abs(dx) <= 0.7 and 3 < dy <= 9
+                if head or shaft:
+                    c.set(x, y, "v" if dx <= 0 else "V")
+    c.outline()
+    return c
+
+
+TUSK = [
+    "................",
+    "...........kk...",
+    "..........kbbk..",
+    "..........kbBk..",
+    ".........kbbBk..",
+    ".........kbBk...",
+    "........kbbBk...",
+    ".......kbbBk....",
+    "......kbbBnk....",
+    ".....kbbBnk.....",
+    "...kkbbBnk......",
+    "..kbbbBnk.......",
+    "..knnnnk........",
+    "...kkkk.........",
+    "................",
+    "................",
+]
+
+
 # --- Crock: viene de su hoja de sprites (tools/import_crock.py) -------------
 
 
@@ -643,6 +681,8 @@ def objetos():
         ("bat", scaled(from_rows(BAT, 16, 16))),
         ("fire", fire()),
         ("exit", exit_arrow()),
+        ("wind", wind()),
+        ("tusk", scaled(from_rows(TUSK, 16, 16))),
     ]
 
 

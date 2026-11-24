@@ -252,6 +252,10 @@ pub enum SimEvent {
     Grab {
         at: (f32, f32),
     },
+    /// El jugador coge el colmillo de mamut (doble carga de golpe).
+    Pickup {
+        at: (f32, f32),
+    },
     /// El jugador toca suelo, con la velocidad de caída que llevaba (px/s).
     Land {
         speed: f32,
@@ -377,7 +381,7 @@ impl Player {
 
         self.strikes -= 1;
         if o.kind.refills() {
-            self.strikes = t.max_strikes as u8;
+            self.strikes = self.max_strikes;
         }
 
         let at = o.center;

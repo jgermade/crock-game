@@ -13,6 +13,11 @@ declare -A NAMES=(
   [c1-03-el-foso]="El foso"
   [c1-04-bichos]="Bichos"
   [c1-05-la-chimenea]="La chimenea"
+  [c2-01-el-colmillo]="El colmillo"
+  [c2-02-corrientes]="Corrientes"
+  [c2-03-viento-y-hueso]="Viento y hueso"
+  [c2-04-el-nido]="El nido"
+  [c2-05-la-gran-corriente]="La gran corriente"
 )
 for src in assets/src/salas/*.txt; do
   name=$(basename "$src" .txt)

@@ -254,6 +254,19 @@ fn draw_zones(canvas: &mut WindowCanvas, world: &World, view: &View, gfx: &Gfx) 
     let t = TILE as f32;
     let pulse = ((world.tick as f32 / 40.0).sin() * 0.5 + 0.5) * 0.5 + 0.5;
     for z in &world.map.zones {
+        match z.kind {
+            ZoneKind::Wind => {
+                draw_wind(canvas, world, view, z);
+                continue;
+            }
+            ZoneKind::Tusk => {
+                if world.tusk_available() {
+                    draw_tusk(canvas, world, view, gfx, z);
+                }
+                continue;
+            }
+            ZoneKind::Fire | ZoneKind::Exit => {}
+        }
         let cells_x = (z.w + TILE - 1) / TILE;
         let cells_y = (z.h + TILE - 1) / TILE;
         for cy in 0..cells_y {
@@ -265,7 +278,7 @@ fn draw_zones(canvas: &mut WindowCanvas, world: &World, view: &View, gfx: &Gfx) 
                         let flip = ((world.tick / 18) as i32 + cx) % 2 == 0;
                         s.draw(canvas, 7, view.rect(x, y, t, t), flip);
                     }
-                    (ZoneKind::Exit, Some(s)) => {
+                    (_, Some(s)) => {
                         let left = z.x < world.map.width_px() / 2;
                         s.set_alpha((pulse * 255.0) as u8);
                         s.draw(canvas, 8, view.rect(x, y, t, t), left);
@@ -274,7 +287,7 @@ fn draw_zones(canvas: &mut WindowCanvas, world: &World, view: &View, gfx: &Gfx) 
                     (kind, None) => {
                         canvas.set_draw_color(match kind {
                             ZoneKind::Fire => Color::RGB(220, 90, 40),
-                            ZoneKind::Exit => Color::RGB(240, 220, 140),
+                            _ => Color::RGB(240, 220, 140),
                         });
                         let _ = canvas.draw_rect(view.rect(x, y, t, t));
                     }
@@ -283,6 +296,79 @@ fn draw_zones(canvas: &mut WindowCanvas, world: &World, view: &View, gfx: &Gfx) 
         }
     }
 }
+
+/// Corriente de aire: un velo tenue y rayas que suben, deterministas a
+/// partir del tick.
+fn draw_wind(canvas: &mut WindowCanvas, world: &World, view: &View, z: &crock_sim::Zone) {
+    let secs = world.tick as f32 / crock_sim::SIM_HZ as f32;
+    let (x0, y0, w, h) = (z.x as f32, z.y as f32, z.w as f32, z.h as f32);
+    canvas.set_blend_mode(sdl3::render::BlendMode::Blend);
+    canvas.set_draw_color(Color::RGBA(170, 200, 230, 18));
+    let _ = canvas.fill_rect(view.rect(x0, y0, w, h));
+    let px = 1.0 / ART;
+    // Una raya por cada 2 px de ancho (en unidades), con velocidad y fase propias.
+    let n = (w / 2.0).ceil() as u32;
+    for i in 0..n {
+        let hsh = |k: u32| {
+            let v = (i.wrapping_mul(2_654_435_761)
+                ^ (k ^ z.x as u32 ^ (z.y as u32) << 16).wrapping_mul(40_503))
+            .wrapping_mul(2_246_822_519);
+            (v >> 8) as f32 / (1u32 << 24) as f32
+        };
+        let len = 3.0 + hsh(1) * 5.0;
+        let speed = 50.0 + hsh(2) * 50.0;
+        let span = h + len;
+        let y = y0 + h - (secs * speed + hsh(3) * span).rem_euclid(span);
+        let x = x0 + i as f32 * 2.0 + hsh(4) * 2.0 + (secs * 3.0 + hsh(5) * 6.3).sin() * 0.7;
+        // Recortada a la zona.
+        let (top, bottom) = (y.max(y0), (y + len).min(y0 + h));
+        if bottom <= top {
+            continue;
+        }
+        let a = 50.0 + hsh(6) * 70.0;
+        canvas.set_draw_color(Color::RGBA(215, 230, 245, a as u8));
+        let _ = canvas.fill_rect(view.rect(x, top, px, bottom - top));
+    }
+    canvas.set_blend_mode(sdl3::render::BlendMode::None);
+}
+
+/// Colmillo de mamut: flota y brilla hasta que se coge.
+fn draw_tusk(
+    canvas: &mut WindowCanvas,
+    world: &World,
+    view: &View,
+    gfx: &Gfx,
+    z: &crock_sim::Zone,
+) {
+    let secs = world.tick as f32 / crock_sim::SIM_HZ as f32;
+    let (cx, cy) = (
+        z.x as f32 + z.w as f32 / 2.0,
+        z.y as f32 + z.h as f32 / 2.0 + (secs * 2.5).sin() * 1.0,
+    );
+    canvas.set_blend_mode(sdl3::render::BlendMode::Blend);
+    let glow = (secs * 4.0).sin() * 0.5 + 0.5;
+    // Halo redondeado: rectángulos en cruz que se solapan.
+    canvas.set_draw_color(Color::RGBA(250, 235, 190, (14.0 + 22.0 * glow) as u8));
+    for (hw, hh) in [(5.0, 2.5), (4.0, 4.0), (2.5, 5.0)] {
+        let _ = canvas.fill_rect(view.rect(cx - hw, cy - hh, hw * 2.0, hh * 2.0));
+    }
+    canvas.set_blend_mode(sdl3::render::BlendMode::None);
+    match &gfx.objetos {
+        Some(s) => s.draw(
+            canvas,
+            TUSK_SPRITE,
+            view.rect(cx - 4.0, cy - 4.0, 8.0, 8.0),
+            false,
+        ),
+        _ => {
+            canvas.set_draw_color(Color::RGB(245, 236, 210));
+            let _ = canvas.fill_rect(view.rect(cx - 2.0, cy - 3.0, 4.0, 6.0));
+        }
+    }
+}
+
+/// Índice del colmillo en `objetos.png` (ver `tools/gen_art.py`).
+const TUSK_SPRITE: u32 = 10;
 
 fn sprite_index(kind: StrikeKind) -> u32 {
     match kind {
@@ -428,6 +514,22 @@ fn draw_player(
             let d = 1.0 + i as f32 * 1.6;
             let _ =
                 canvas.fill_rect(view.rect(cx + dir.0 * d - 1.0, cy + dir.1 * d - 1.0, 2.0, 2.0));
+        }
+    }
+
+    if p.max_strikes > 1 && p.hanging == 0 {
+        // Con doble carga: un punto por golpe, encima de la cabeza.
+        let n = p.max_strikes as f32;
+        let gap = 2.0;
+        let x0 = cx - (n * gap - 1.0) / 2.0;
+        for i in 0..p.max_strikes {
+            let lit = i < p.strikes;
+            canvas.set_draw_color(if lit {
+                Color::RGB(250, 236, 196)
+            } else {
+                Color::RGB(80, 74, 96)
+            });
+            let _ = canvas.fill_rect(view.rect(x0 + i as f32 * gap, y - 4.0, 1.0, 1.0));
         }
     }
 
